@@ -1,0 +1,6 @@
+services:
+    Jsor\Doctrine\PostGIS\Event\ORMSchemaEventListener:
+        tags: [{ name: doctrine.event_listener, event: postGenerateSchemaTable, connection: default }]
+
+    Jsor\Doctrine\PostGIS\Driver\Middleware:
+        tags: [doctrine.middleware]

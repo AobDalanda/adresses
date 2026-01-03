@@ -1,10 +1,48 @@
+# ---------------------------------------
+# Symfony
+# ---------------------------------------
 
-###> symfony/framework-bundle ###
-/.env.local
-/.env.local.php
-/.env.*.local
-/config/secrets/prod/prod.decrypt.private.php
-/public/bundles/
+# Dossiers générés automatiquement
 /var/
 /vendor/
-###< symfony/framework-bundle ###
+
+# Cache & logs (au cas où var/ est ignoré partiellement)
+var/cache/
+/var/log/
+
+# Environnements locaux
+.env.local
+.env.*.local
+.phpunit.result.cache
+
+# Fichiers sensibles ou temporaires
+/.env.local.php
+/.DS_Store
+
+# ---------------------------------------
+# IDEs & éditeurs
+# ---------------------------------------
+
+# PhpStorm / JetBrains
+/.idea/
+
+# VSCode
+/.vscode/
+
+# Eclipse
+.project
+.buildpath
+.settings/
+
+# NetBeans
+/nbproject/
+
+# ---------------------------------------
+# Autres fichiers à ignorer
+# ---------------------------------------
+
+# Composer
+composer.phar
+
+# Système
+Thumbs.db
