@@ -4,8 +4,64 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d3c6c76a59bf8710c44c17211a7d8847",
+    "content-hash": "539fba743f2c55d18f93b46632b2a49d",
     "packages": [
+        {
+            "name": "c3t4r4/openlocationcode",
+            "version": "v1.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/c3t4r4/open-location-code.git",
+                "reference": "499b95ba121dee38e9e6fe7359cc9e9e0c5cfa4b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/c3t4r4/open-location-code/zipball/499b95ba121dee38e9e6fe7359cc9e9e0c5cfa4b",
+                "reference": "499b95ba121dee38e9e6fe7359cc9e9e0c5cfa4b",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.0"
+            },
+            "require-dev": {
+                "pestphp/pest": "*",
+                "phpstan/phpstan": "^1.10",
+                "phpunit/phpunit": "^10.0",
+                "squizlabs/php_codesniffer": "^3.7"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "OpenLocationCode\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "c3t4r4",
+                    "homepage": "https://github.com/c3t4r4/open-location-code"
+                }
+            ],
+            "description": "Open Location Code (Plus Codes) implementation for PHP - Convert locations to and from short codes - Forked from google/open-location-code",
+            "homepage": "https://github.com/c3t4r4/open-location-code",
+            "keywords": [
+                "coordinates",
+                "geocoding",
+                "latitude",
+                "location",
+                "longitude",
+                "open-location-code",
+                "plus-codes"
+            ],
+            "support": {
+                "issues": "https://github.com/c3t4r4/open-location-code/issues",
+                "source": "https://github.com/c3t4r4/open-location-code/tree/v1.1.1"
+            },
+            "time": "2025-10-16T22:18:50+00:00"
+        },
         {
             "name": "psr/cache",
             "version": "3.0.0",
@@ -2845,7 +2901,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": [],
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
@@ -2853,6 +2909,6 @@
         "ext-ctype": "*",
         "ext-iconv": "*"
     },
-    "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "platform-dev": [],
+    "plugin-api-version": "2.6.0"
 }
