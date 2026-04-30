@@ -1,0 +1,131 @@
+{
+    "info": {
+        "_postman_id": "9f995f8b-b5f9-4149-915c-2ad1a1f0de5f",
+        "name": "Adressage API - Auth OTP",
+        "description": "Flow Android OTP: request code, verify code, then call protected endpoint.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Auth OTP Request",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"phone\": \"{{phone}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/auth/otp/request",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "otp",
+                        "request"
+                    ]
+                },
+                "description": "Demande l'envoi OTP via WhatsApp."
+            },
+            "response": []
+        },
+        {
+            "name": "Auth OTP Verify",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "let json = {};",
+                            "try {",
+                            "  json = pm.response.json();",
+                            "} catch (e) {}",
+                            "",
+                            "if (pm.response.code === 200 && json.token) {",
+                            "  pm.environment.set('token', json.token);",
+                            "}",
+                            "",
+                            "pm.test('Status is 200', function () {",
+                            "  pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "pm.test('Token is returned', function () {",
+                            "  pm.expect(json.token).to.be.a('string').and.not.empty;",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"otp\": \"{{otp}}\",\n  \"name\": \"{{name}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/auth/otp/verify",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "otp",
+                        "verify"
+                    ]
+                },
+                "description": "Vérifie OTP et stocke le JWT dans la variable d'environnement `token`."
+            },
+            "response": []
+        },
+        {
+            "name": "User Me (Protected)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Status is 200', function () {",
+                            "  pm.response.to.have.status(200);",
+                            "});"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/user/me",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "user",
+                        "me"
+                    ]
+                },
+                "description": "Valide l'authentification mobile avec le JWT obtenu."
+            },
+            "response": []
+        }
+    ]
+}

@@ -46,3 +46,10 @@ composer.phar
 
 # Système
 Thumbs.db
+
+###> lexik/jwt-authentication-bundle ###
+/config/jwt/*.pem
+###< lexik/jwt-authentication-bundle ###
+
+# Firebase service account key
+/config/firebase/service-account.json

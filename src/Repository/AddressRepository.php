@@ -11,13 +11,39 @@ class AddressRepository
     {
     }
 
+    public function findById(int $id): ?array
+    {
+        $sql = "
+            SELECT a.id,
+                   a.address_code,
+                   a.display_label,
+                   a.phone_display,
+                   a.created_at
+            FROM address a
+            WHERE a.id = :id
+            LIMIT 1
+        ";
+
+        $rsm = new ResultSetMapping();
+        $rsm->addScalarResult('id', 'id');
+        $rsm->addScalarResult('address_code', 'address_code');
+        $rsm->addScalarResult('display_label', 'display_label');
+        $rsm->addScalarResult('phone_display', 'phone_display');
+        $rsm->addScalarResult('created_at', 'created_at');
+
+        $query = $this->em->createNativeQuery($sql, $rsm);
+        $query->setParameter('id', $id);
+
+        return $query->getOneOrNullResult();
+    }
+
     /**
      * Trouver l’adresse la plus proche.
      */
     public function findNearest(float $lat, float $lng, int $radiusMeters = 10): ?array
     {
         $sql = "
-            SELECT a.address_code,
+            SELECT a.display_label,
                    ST_Distance(gc.centroid, point) AS distance
             FROM address a
             JOIN geo_cell gc ON a.geo_cell_id = gc.id,
@@ -28,7 +54,7 @@ class AddressRepository
         ";
 
         $rsm = new ResultSetMapping();
-        $rsm->addScalarResult('address_code', 'address_code');
+        $rsm->addScalarResult('display_label', 'display_label');
         $rsm->addScalarResult('distance', 'distance');
 
         $query = $this->em->createNativeQuery($sql, $rsm);

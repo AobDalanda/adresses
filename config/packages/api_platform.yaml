@@ -1,0 +1,12 @@
+api_platform:
+    title: Adressage API
+    version: 1.0.0
+    mapping:
+        paths:
+            - '%kernel.project_dir%/src/Entity'
+            - '%kernel.project_dir%/src/Api/Resource'
+    defaults:
+        stateless: true
+        pagination_enabled: false
+        cache_headers:
+            vary: ['Content-Type', 'Authorization', 'Origin']

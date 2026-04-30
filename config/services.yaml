@@ -7,6 +7,13 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    jwt_ttl: '%env(int:JWT_TTL)%'
+    firebase_credentials: '%env(resolve:FIREBASE_CREDENTIALS)%'
+    evolution_api_base_url: '%env(EVOLUTION_API_BASE_URL)%'
+    evolution_api_key: '%env(EVOLUTION_API_KEY)%'
+    evolution_api_instance: '%env(EVOLUTION_API_INSTANCE)%'
+    evolution_api_otp_delay_ms: '%env(int:EVOLUTION_API_OTP_DELAY_MS)%'
+    address_require_admin_area: '%env(bool:ADDRESS_REQUIRE_ADMIN_AREA)%'
 
 services:
     # default configuration for services in *this* file
@@ -19,5 +26,48 @@ services:
     App\:
         resource: '../src/'
 
+    App\Api\Controller\:
+        resource: '../src/Api/Controller/'
+        tags: ['controller.service_arguments']
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+    App\Service\JwtAuthService:
+        arguments:
+            $tokenTtlSeconds: '%jwt_ttl%'
+
+    App\Service\FcmPushClient:
+        arguments:
+            $credentialsPath: '%firebase_credentials%'
+
+    App\Service\WhatsAppOtpClient:
+        arguments:
+            $baseUrl: '%evolution_api_base_url%'
+            $apiKey: '%evolution_api_key%'
+            $instance: '%evolution_api_instance%'
+            $delayMs: '%evolution_api_otp_delay_ms%'
+
+    App\Service\CreateConnectedUserAddressService:
+        arguments:
+            $requireAdminArea: '%address_require_admin_area%'
+
+    App\Service\Payment\StripePaymentProvider:
+        arguments:
+            $apiKey: '%env(STRIPE_API_KEY)%'
+        tags: ['app.payment_provider']
+
+    App\Service\Payment\OrangeMoneyPaymentProvider:
+        arguments:
+            $baseUrl: '%env(ORANGE_MONEY_BASE_URL)%'
+            $apiKey: '%env(ORANGE_MONEY_API_KEY)%'
+        tags: ['app.payment_provider']
+
+    App\Service\Payment\MtnMoneyPaymentProvider:
+        arguments:
+            $baseUrl: '%env(MTN_MONEY_BASE_URL)%'
+            $apiKey: '%env(MTN_MONEY_API_KEY)%'
+        tags: ['app.payment_provider']
+
+    App\Service\PaymentService:
+        arguments:
+            $providers: !tagged_iterator app.payment_provider

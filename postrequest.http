@@ -1,0 +1,7 @@
+### Récupérer la liste de posts
+GET https://api-pour-apprendre.fr/api/v1/posts
+Accept: application/json
+
+### Récupérer la liste de tous posts
+GET https://api-pour-apprendre.fr/api/v1/posts?nopaginate=true
+Accept: application/json
