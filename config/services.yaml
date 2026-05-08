@@ -14,6 +14,8 @@ parameters:
     evolution_api_instance: '%env(EVOLUTION_API_INSTANCE)%'
     evolution_api_otp_delay_ms: '%env(int:EVOLUTION_API_OTP_DELAY_MS)%'
     address_require_admin_area: '%env(bool:ADDRESS_REQUIRE_ADMIN_AREA)%'
+    app_address_target_accuracy_meters: '%env(int:APP_ADDRESS_TARGET_ACCURACY_METERS)%'
+    app_address_max_search_duration_seconds: '%env(int:APP_ADDRESS_MAX_SEARCH_DURATION_SECONDS)%'
 
 services:
     # default configuration for services in *this* file
@@ -50,6 +52,12 @@ services:
     App\Service\CreateConnectedUserAddressService:
         arguments:
             $requireAdminArea: '%address_require_admin_area%'
+
+    App\Api\Controller\AppAddressConfigAction:
+        arguments:
+            $targetAccuracyMeters: '%app_address_target_accuracy_meters%'
+            $maxSearchDurationSeconds: '%app_address_max_search_duration_seconds%'
+        tags: ['controller.service_arguments']
 
     App\Service\Payment\StripePaymentProvider:
         arguments:
