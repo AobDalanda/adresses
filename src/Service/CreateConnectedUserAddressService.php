@@ -27,6 +27,7 @@ final class CreateConnectedUserAddressService
      *     plus_code?: ?string,
      *     accuracy?: ?float,
      *     source?: ?string,
+     *     contactPhone?: ?string,
      *     isDefault?: ?bool
      * } $payload
      * @return array{
@@ -34,6 +35,7 @@ final class CreateConnectedUserAddressService
      *     identifier: string,
      *     addressCode: string,
      *     displayLabel: string,
+     *     contactPhone: string,
      *     plusCode: string,
      *     adminArea: array{id: int, name: string}|null,
      *     verified: bool,
@@ -53,6 +55,9 @@ final class CreateConnectedUserAddressService
         $source = isset($payload['source']) && is_string($payload['source']) && trim($payload['source']) !== ''
             ? trim($payload['source'])
             : self::DEFAULT_SOURCE;
+        $contactPhone = isset($payload['contactPhone']) && is_string($payload['contactPhone']) && trim($payload['contactPhone']) !== ''
+            ? trim($payload['contactPhone'])
+            : $phone;
         $isDefault = (bool) ($payload['isDefault'] ?? true);
 
         $this->db->beginTransaction();
@@ -187,6 +192,7 @@ final class CreateConnectedUserAddressService
                 INSERT INTO address (
                     address_code,
                     phone_display,
+                    contact_phone,
                     geo_cell_id,
                     plus_code_id,
                     weighted_location_id,
@@ -196,6 +202,7 @@ final class CreateConnectedUserAddressService
                 VALUES (
                     :addressCode,
                     :phoneDisplay,
+                    :contactPhone,
                     :geoCellId,
                     :plusCodeId,
                     :weightedLocationId,
@@ -204,14 +211,16 @@ final class CreateConnectedUserAddressService
                 )
                 ON CONFLICT (phone_display, geo_cell_id) DO UPDATE
                     SET plus_code_id = EXCLUDED.plus_code_id,
+                        contact_phone = EXCLUDED.contact_phone,
                         weighted_location_id = EXCLUDED.weighted_location_id,
                         admin_area_id = EXCLUDED.admin_area_id,
                         display_label = EXCLUDED.display_label
-                RETURNING id, address_code, display_label
+                RETURNING id, address_code, display_label, contact_phone
                 ",
                 [
                     'addressCode' => $addressCode,
                     'phoneDisplay' => $phone,
+                    'contactPhone' => $contactPhone,
                     'geoCellId' => $geoCellId,
                     'plusCodeId' => $plusCodeId,
                     'weightedLocationId' => $weightedLocationId,
@@ -287,6 +296,7 @@ final class CreateConnectedUserAddressService
                 'identifier' => AddressQrCodec::encode($addressId),
                 'addressCode' => (string) $address['address_code'],
                 'displayLabel' => (string) $address['display_label'],
+                'contactPhone' => (string) $address['contact_phone'],
                 'plusCode' => $resolvedPlusCode,
                 'adminArea' => $adminArea !== null ? [
                     'id' => (int) $adminArea['id'],

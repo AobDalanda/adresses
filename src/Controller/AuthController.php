@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -17,7 +18,8 @@ class AuthController extends AbstractController
     public function __construct(
         private OtpService $otpService,
         private UserAccountService $userAccountService,
-        private JwtAuthService $jwt
+        private JwtAuthService $jwt,
+        private UserAccountAssetUrlResolver $assetUrlResolver
     ) {
     }
 
@@ -78,9 +80,14 @@ class AuthController extends AbstractController
             $resolvedName = $registration['fullName'];
         }
 
-        $userId = $this->userAccountService->ensureUserAccount(
+        $user = $this->userAccountService->upsertUserAccount(
             $phone,
-            $resolvedName
+            $resolvedName,
+            true,
+            $registration['profilePhotoPath'] ?? null,
+            $registration['accountType'] ?? 'client',
+            $registration['identityDocumentPath'] ?? null,
+            $registration['driverLicensePath'] ?? null
         );
 
         if ($registration) {
@@ -90,11 +97,12 @@ class AuthController extends AbstractController
         $token = $this->jwt->issueToken([
             'sub' => $phone,
             'typ' => 'mobile',
-            'uid' => $userId,
+            'uid' => $user['id'],
         ]);
 
         return $this->json([
             'token' => $token,
+            'user' => $this->assetUrlResolver->enrich($user),
         ]);
     }
 }

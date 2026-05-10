@@ -4,6 +4,9 @@ namespace App\Api\Controller;
 
 use App\Service\CreateConnectedUserAddressService;
 use App\Service\JwtAuthService;
+use App\Service\SubscriptionService;
+use App\Service\UserAddressService;
+use App\Util\PhoneNumberNormalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -11,7 +14,9 @@ final class UserAddressCreateAction
 {
     public function __construct(
         private JwtAuthService $jwt,
-        private CreateConnectedUserAddressService $createAddress
+        private CreateConnectedUserAddressService $createAddress,
+        private SubscriptionService $subscriptions,
+        private UserAddressService $userAddresses
     ) {
     }
 
@@ -62,14 +67,34 @@ final class UserAddressCreateAction
             return new JsonResponse(['message' => 'source doit être une chaîne'], 400);
         }
 
+        if (isset($payload['contactPhone']) && $payload['contactPhone'] !== null && !is_string($payload['contactPhone'])) {
+            return new JsonResponse(['message' => 'contactPhone doit être une chaîne'], 400);
+        }
+
         $phone = (string) ($auth['sub'] ?? '');
         if ($phone === '') {
             return new JsonResponse(['message' => 'Token invalide'], 401);
         }
 
+        $userId = (int) $auth['uid'];
+        $subscription = $this->subscriptions->getActiveSubscription('USER', $userId);
+        if ($subscription === null && $this->userAddresses->findUserAddress($userId) !== null) {
+            return new JsonResponse([
+                'message' => 'Abonnement requis pour créer une nouvelle adresse',
+            ], 403);
+        }
+
+        $contactPhone = null;
+        if (isset($payload['contactPhone']) && $payload['contactPhone'] !== null) {
+            $contactPhone = PhoneNumberNormalizer::normalize($payload['contactPhone']);
+            if ($contactPhone === '') {
+                return new JsonResponse(['message' => 'contactPhone est invalide'], 400);
+            }
+        }
+
         try {
             $result = $this->createAddress->createForUser(
-                (int) $auth['uid'],
+                $userId,
                 $phone,
                 [
                     'label' => trim($label),
@@ -79,6 +104,7 @@ final class UserAddressCreateAction
                     'plus_code' => $payload['plus_code'] ?? null,
                     'accuracy' => isset($payload['accuracy']) ? (float) $payload['accuracy'] : null,
                     'source' => $payload['source'] ?? null,
+                    'contactPhone' => $contactPhone,
                     'isDefault' => $payload['isDefault'] ?? true,
                 ],
                 $request->getClientIp()

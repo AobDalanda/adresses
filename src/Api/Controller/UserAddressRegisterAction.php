@@ -70,6 +70,7 @@ final class UserAddressRegisterAction
             'addressCode' => $address['address_code'],
             'displayLabel' => $address['display_label'],
             'phoneDisplay' => $address['phone_display'],
+            'contactPhone' => $address['contact_phone'],
             'isPrimary' => $isPrimary,
         ], 201);
     }

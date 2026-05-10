@@ -4,6 +4,7 @@ namespace App\Api\Controller;
 
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -14,7 +15,8 @@ final class UserAccountRegisterVerifyAction
     public function __construct(
         private OtpService $otpService,
         private UserAccountService $userAccountService,
-        private JwtAuthService $jwt
+        private JwtAuthService $jwt,
+        private UserAccountAssetUrlResolver $assetUrlResolver
     ) {
     }
 
@@ -48,7 +50,15 @@ final class UserAccountRegisterVerifyAction
             return new JsonResponse(['message' => 'OTP invalide'], 401);
         }
 
-        $user = $this->userAccountService->upsertUserAccount($phone, $registration['fullName'], true);
+        $user = $this->userAccountService->upsertUserAccount(
+            $phone,
+            $registration['fullName'],
+            true,
+            $registration['profilePhotoPath'] ?? null,
+            $registration['accountType'] ?? 'client',
+            $registration['identityDocumentPath'] ?? null,
+            $registration['driverLicensePath'] ?? null
+        );
 
         $this->userAccountService->markPendingRegistrationVerified($registration['id']);
 
@@ -60,7 +70,7 @@ final class UserAccountRegisterVerifyAction
 
         return new JsonResponse([
             'token' => $token,
-            'user' => $user,
+            'user' => $this->assetUrlResolver->enrich($user),
         ], 201);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Api\Controller;
 
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -14,7 +15,8 @@ final class AuthOtpVerifyAction
     public function __construct(
         private OtpService $otpService,
         private UserAccountService $userAccountService,
-        private JwtAuthService $jwt
+        private JwtAuthService $jwt,
+        private UserAccountAssetUrlResolver $assetUrlResolver
     ) {
     }
 
@@ -27,7 +29,6 @@ final class AuthOtpVerifyAction
 
         $phone = $payload['phone'] ?? null;
         $otp = $payload['otp'] ?? null;
-        $name = $payload['name'] ?? null;
         if (!is_string($phone) || $phone === '' || !is_string($otp) || $otp === '') {
             return new JsonResponse(['message' => 'phone et otp sont requis'], 400);
         }
@@ -41,29 +42,20 @@ final class AuthOtpVerifyAction
             return new JsonResponse(['message' => 'OTP invalide'], 401);
         }
 
-        $resolvedName = is_string($name) && trim($name) !== '' ? trim($name) : null;
-        $registration = $this->userAccountService->findPendingRegistration($phone);
-        if ($resolvedName === null && $registration) {
-            $resolvedName = $registration['fullName'];
-        }
-
-        $userId = $this->userAccountService->ensureUserAccount(
-            $phone,
-            $resolvedName
-        );
-
-        if ($registration) {
-            $this->userAccountService->markPendingRegistrationVerified($registration['id']);
+        $user = $this->userAccountService->findVerifiedUserByPhone($phone);
+        if (!$user) {
+            return new JsonResponse(['message' => 'USER_NOT_FOUND'], 404);
         }
 
         $token = $this->jwt->issueToken([
             'sub' => $phone,
             'typ' => 'mobile',
-            'uid' => $userId,
+            'uid' => $user['id'],
         ]);
 
         return new JsonResponse([
             'token' => $token,
+            'user' => $this->assetUrlResolver->enrich($user),
         ]);
     }
 }

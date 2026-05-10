@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\JwtAuthService;
+use App\Service\UserAccountAssetUrlResolver;
 use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -14,7 +15,8 @@ class UserAccountController extends AbstractController
 {
     public function __construct(
         private JwtAuthService $jwt,
-        private Connection $db
+        private Connection $db,
+        private UserAccountAssetUrlResolver $assetUrlResolver
     ) {
     }
 
@@ -34,7 +36,7 @@ class UserAccountController extends AbstractController
 
         $user = $this->db->fetchAssociative(
             "
-            SELECT id, phone, name, verified, created_at
+            SELECT id, phone, name, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
             FROM user_account
             WHERE id = :id
             LIMIT 1
@@ -46,12 +48,16 @@ class UserAccountController extends AbstractController
             return $this->json(['message' => 'Utilisateur introuvable'], 404);
         }
 
-        return $this->json([
+        return $this->json($this->assetUrlResolver->enrich([
             'id' => (int) $user['id'],
             'phone' => (string) $user['phone'],
             'name' => $user['name'],
             'verified' => (bool) $user['verified'],
+            'accountType' => (string) $user['account_type'],
+            'profilePhotoPath' => isset($user['profile_photo_path']) ? (string) $user['profile_photo_path'] : null,
+            'identityDocumentPath' => isset($user['identity_document_path']) ? (string) $user['identity_document_path'] : null,
+            'driverLicensePath' => isset($user['driver_license_path']) ? (string) $user['driver_license_path'] : null,
             'createdAt' => $user['created_at'],
-        ]);
+        ]));
     }
 }

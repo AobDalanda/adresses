@@ -27,6 +27,9 @@ class Address
     #[ORM\Column(nullable: true)]
     public ?string $phoneDisplay;
 
+    #[ORM\Column(nullable: true)]
+    public ?string $contactPhone;
+
     #[ORM\Column(type: 'datetime')]
     public \DateTimeInterface $createdAt;
 }

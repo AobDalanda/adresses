@@ -16,6 +16,12 @@ parameters:
     address_require_admin_area: '%env(bool:ADDRESS_REQUIRE_ADMIN_AREA)%'
     app_address_target_accuracy_meters: '%env(int:APP_ADDRESS_TARGET_ACCURACY_METERS)%'
     app_address_max_search_duration_seconds: '%env(int:APP_ADDRESS_MAX_SEARCH_DURATION_SECONDS)%'
+    supabase_url: '%env(string:SUPABASE_URL)%'
+    supabase_service_role_key: '%env(string:SUPABASE_SERVICE_ROLE_KEY)%'
+    supabase_signed_url_ttl_seconds: '%env(int:SUPABASE_SIGNED_URL_TTL_SECONDS)%'
+    supabase_profile_photos_bucket: '%env(string:SUPABASE_PROFILE_PHOTOS_BUCKET)%'
+    supabase_identity_documents_bucket: '%env(string:SUPABASE_IDENTITY_DOCUMENTS_BUCKET)%'
+    supabase_driver_licenses_bucket: '%env(string:SUPABASE_DRIVER_LICENSES_BUCKET)%'
 
 services:
     # default configuration for services in *this* file
@@ -79,3 +85,20 @@ services:
     App\Service\PaymentService:
         arguments:
             $providers: !tagged_iterator app.payment_provider
+
+    App\Service\SupabaseStorageClient:
+        arguments:
+            $baseUrl: '%supabase_url%'
+            $serviceRoleKey: '%supabase_service_role_key%'
+            $signedUrlTtlSeconds: '%supabase_signed_url_ttl_seconds%'
+
+    App\Service\ProfilePhotoStorage:
+        arguments:
+            $storage: '@App\Service\SupabaseStorageClient'
+            $bucket: '%supabase_profile_photos_bucket%'
+
+    App\Service\AccountDocumentStorage:
+        arguments:
+            $storage: '@App\Service\SupabaseStorageClient'
+            $identityBucket: '%supabase_identity_documents_bucket%'
+            $driverLicenseBucket: '%supabase_driver_licenses_bucket%'

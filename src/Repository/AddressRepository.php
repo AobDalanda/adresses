@@ -18,6 +18,7 @@ class AddressRepository
                    a.address_code,
                    a.display_label,
                    a.phone_display,
+                   a.contact_phone,
                    a.created_at
             FROM address a
             WHERE a.id = :id
@@ -29,6 +30,7 @@ class AddressRepository
         $rsm->addScalarResult('address_code', 'address_code');
         $rsm->addScalarResult('display_label', 'display_label');
         $rsm->addScalarResult('phone_display', 'phone_display');
+        $rsm->addScalarResult('contact_phone', 'contact_phone');
         $rsm->addScalarResult('created_at', 'created_at');
 
         $query = $this->em->createNativeQuery($sql, $rsm);
