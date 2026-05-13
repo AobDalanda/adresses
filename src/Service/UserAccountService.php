@@ -18,18 +18,21 @@ class UserAccountService
         ?string $profilePhotoPath = null,
         string $accountType = 'client',
         ?string $identityDocumentPath = null,
-        ?string $driverLicensePath = null
+        ?string $driverLicensePath = null,
+        ?string $email = null
     ): int
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
+        $normalizedEmail = $this->normalizeEmail($email);
 
         return (int) $this->db->fetchOne(
             "
-            INSERT INTO user_account (phone, name, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
-            VALUES (:phone, :name, true, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
+            INSERT INTO user_account (phone, name, email, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
+            VALUES (:phone, :name, :email, true, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
             ON CONFLICT (phone) DO UPDATE
                 SET verified = true,
                     name = COALESCE(EXCLUDED.name, user_account.name),
+                    email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
                     account_type = COALESCE(EXCLUDED.account_type, user_account.account_type),
                     identity_document_path = COALESCE(EXCLUDED.identity_document_path, user_account.identity_document_path),
@@ -39,6 +42,7 @@ class UserAccountService
             [
                 'phone' => $phone,
                 'name' => $name,
+                'email' => $normalizedEmail,
                 'profilePhotoPath' => $profilePhotoPath,
                 'accountType' => $accountType,
                 'identityDocumentPath' => $identityDocumentPath,
@@ -57,7 +61,8 @@ class UserAccountService
         ?string $profilePhotoPath = null,
         string $accountType = 'client',
         ?string $identityDocumentPath = null,
-        ?string $driverLicensePath = null
+        ?string $driverLicensePath = null,
+        ?string $email = null
     ): array
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
@@ -65,23 +70,26 @@ class UserAccountService
         if ($normalizedName === '') {
             $normalizedName = null;
         }
+        $normalizedEmail = $this->normalizeEmail($email);
 
         $user = $this->db->fetchAssociative(
             "
-            INSERT INTO user_account (phone, name, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
-            VALUES (:phone, :name, :verified, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
+            INSERT INTO user_account (phone, name, email, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
+            VALUES (:phone, :name, :email, :verified, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
             ON CONFLICT (phone) DO UPDATE
                 SET verified = EXCLUDED.verified,
                     name = COALESCE(EXCLUDED.name, user_account.name),
+                    email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
                     account_type = COALESCE(EXCLUDED.account_type, user_account.account_type),
                     identity_document_path = COALESCE(EXCLUDED.identity_document_path, user_account.identity_document_path),
                     driver_license_path = COALESCE(EXCLUDED.driver_license_path, user_account.driver_license_path)
-            RETURNING id, phone, name, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            RETURNING id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
             ",
             [
                 'phone' => $phone,
                 'name' => $normalizedName,
+                'email' => $normalizedEmail,
                 'verified' => $verified,
                 'profilePhotoPath' => $profilePhotoPath,
                 'accountType' => $accountType,
@@ -94,6 +102,7 @@ class UserAccountService
             'id' => (int) $user['id'],
             'phone' => (string) $user['phone'],
             'name' => (string) $user['name'],
+            'email' => isset($user['email']) ? (is_string($user['email']) && $user['email'] !== '' ? $user['email'] : null) : null,
             'verified' => (bool) $user['verified'],
             'accountType' => (string) $user['account_type'],
             'profilePhotoPath' => isset($user['profile_photo_path']) ? (is_string($user['profile_photo_path']) && $user['profile_photo_path'] !== '' ? $user['profile_photo_path'] : null) : null,
@@ -132,7 +141,7 @@ class UserAccountService
 
         $user = $this->db->fetchAssociative(
             "
-            SELECT id, phone, name, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            SELECT id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
             FROM user_account
             WHERE phone = :phone
               AND verified = true
@@ -149,6 +158,7 @@ class UserAccountService
             'id' => (int) $user['id'],
             'phone' => (string) $user['phone'],
             'name' => (string) $user['name'],
+            'email' => isset($user['email']) ? (is_string($user['email']) && $user['email'] !== '' ? $user['email'] : null) : null,
             'verified' => (bool) $user['verified'],
             'accountType' => (string) $user['account_type'],
             'profilePhotoPath' => isset($user['profile_photo_path']) ? (is_string($user['profile_photo_path']) && $user['profile_photo_path'] !== '' ? $user['profile_photo_path'] : null) : null,
@@ -252,20 +262,23 @@ class UserAccountService
         ?string $profilePhotoPath = null,
         string $accountType = 'client',
         ?string $identityDocumentPath = null,
-        ?string $driverLicensePath = null
+        ?string $driverLicensePath = null,
+        ?string $email = null
     ): array
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
+        $normalizedEmail = $this->normalizeEmail($email);
 
         $user = $this->db->fetchAssociative(
             "
-            INSERT INTO user_account (phone, name, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
-            VALUES (:phone, :name, :verified, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
-            RETURNING id, phone, name, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            INSERT INTO user_account (phone, name, email, verified, profile_photo_path, account_type, identity_document_path, driver_license_path)
+            VALUES (:phone, :name, :email, :verified, :profilePhotoPath, :accountType, :identityDocumentPath, :driverLicensePath)
+            RETURNING id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
             ",
             [
                 'phone' => $phone,
                 'name' => $name,
+                'email' => $normalizedEmail,
                 'verified' => $verified,
                 'profilePhotoPath' => $profilePhotoPath,
                 'accountType' => $accountType,
@@ -278,6 +291,7 @@ class UserAccountService
             'id' => (int) $user['id'],
             'phone' => (string) $user['phone'],
             'name' => (string) $user['name'],
+            'email' => isset($user['email']) ? (is_string($user['email']) && $user['email'] !== '' ? $user['email'] : null) : null,
             'verified' => (bool) $user['verified'],
             'accountType' => (string) $user['account_type'],
             'profilePhotoPath' => isset($user['profile_photo_path']) ? (is_string($user['profile_photo_path']) && $user['profile_photo_path'] !== '' ? $user['profile_photo_path'] : null) : null,
@@ -285,5 +299,75 @@ class UserAccountService
             'driverLicensePath' => isset($user['driver_license_path']) ? (is_string($user['driver_license_path']) && $user['driver_license_path'] !== '' ? $user['driver_license_path'] : null) : null,
             'createdAt' => $user['created_at'],
         ];
+    }
+
+    /**
+     * @return array{id: int, phone: string, name: ?string, email: ?string, verified: bool, accountType: string, profilePhotoPath: ?string, identityDocumentPath: ?string, driverLicensePath: ?string, createdAt: mixed}|null
+     */
+    public function updateCurrentUserProfile(int $userId, ?string $name, mixed $email, ?string $profilePhotoPath = null): ?array
+    {
+        $normalizedName = $this->normalizeName($name);
+        $emailWasProvided = $email !== null || is_string($email);
+        $normalizedEmail = $this->normalizeEmail(is_string($email) ? $email : null);
+
+        $user = $this->db->fetchAssociative(
+            '
+            UPDATE user_account
+            SET name = COALESCE(:name, name),
+                email = CASE
+                    WHEN :emailProvided = true THEN :email
+                    ELSE email
+                END,
+                profile_photo_path = COALESCE(:profilePhotoPath, profile_photo_path)
+            WHERE id = :id
+            RETURNING id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            ',
+            [
+                'id' => $userId,
+                'name' => $normalizedName,
+                'email' => $normalizedEmail,
+                'emailProvided' => $emailWasProvided,
+                'profilePhotoPath' => $profilePhotoPath,
+            ]
+        );
+
+        if ($user === false) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $user['id'],
+            'phone' => (string) $user['phone'],
+            'name' => isset($user['name']) && is_string($user['name']) && $user['name'] !== '' ? $user['name'] : null,
+            'email' => isset($user['email']) && is_string($user['email']) && $user['email'] !== '' ? $user['email'] : null,
+            'verified' => (bool) $user['verified'],
+            'accountType' => (string) $user['account_type'],
+            'profilePhotoPath' => isset($user['profile_photo_path']) ? (is_string($user['profile_photo_path']) && $user['profile_photo_path'] !== '' ? $user['profile_photo_path'] : null) : null,
+            'identityDocumentPath' => isset($user['identity_document_path']) ? (is_string($user['identity_document_path']) && $user['identity_document_path'] !== '' ? $user['identity_document_path'] : null) : null,
+            'driverLicensePath' => isset($user['driver_license_path']) ? (is_string($user['driver_license_path']) && $user['driver_license_path'] !== '' ? $user['driver_license_path'] : null) : null,
+            'createdAt' => $user['created_at'],
+        ];
+    }
+
+    private function normalizeName(?string $name): ?string
+    {
+        if ($name === null) {
+            return null;
+        }
+
+        $normalized = trim(preg_replace('/\s+/', ' ', $name) ?? $name);
+
+        return $normalized === '' ? null : $normalized;
+    }
+
+    private function normalizeEmail(?string $email): ?string
+    {
+        if ($email === null) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($email));
+
+        return $normalized === '' ? null : $normalized;
     }
 }

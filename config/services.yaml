@@ -22,6 +22,11 @@ parameters:
     supabase_profile_photos_bucket: '%env(string:SUPABASE_PROFILE_PHOTOS_BUCKET)%'
     supabase_identity_documents_bucket: '%env(string:SUPABASE_IDENTITY_DOCUMENTS_BUCKET)%'
     supabase_driver_licenses_bucket: '%env(string:SUPABASE_DRIVER_LICENSES_BUCKET)%'
+    qr_allowed_ips: '%env(csv:QR_ALLOWED_IPS)%'
+    qr_brute_force_max_attempts: '%env(int:QR_BRUTE_FORCE_MAX_ATTEMPTS)%'
+    qr_brute_force_block_time: '%env(string:QR_BRUTE_FORCE_BLOCK_TIME)%'
+    qr_default_max_scans: '%env(int:QR_DEFAULT_MAX_SCANS)%'
+    qr_default_expires_in: '%env(string:QR_DEFAULT_EXPIRES_IN)%'
 
 services:
     # default configuration for services in *this* file
@@ -102,3 +107,26 @@ services:
             $storage: '@App\Service\SupabaseStorageClient'
             $identityBucket: '%supabase_identity_documents_bucket%'
             $driverLicenseBucket: '%supabase_driver_licenses_bucket%'
+
+    App\Service\QrCodeAccessPolicy:
+        arguments:
+            $allowedIps: '%qr_allowed_ips%'
+
+    App\Service\QrCodeBruteForceGuard:
+        arguments:
+            $cache: '@cache.app'
+            $maxAttempts: '%qr_brute_force_max_attempts%'
+            $blockTime: '%qr_brute_force_block_time%'
+
+    App\Controller\QrCodeController:
+        arguments:
+            $qrRateLimiter: '@limiter.qr_scan'
+
+    App\Controller\GenerateQrCodeController:
+        arguments:
+            $qrGenerateRateLimiter: '@limiter.qr_generate'
+
+    App\Service\AddressQrCodeService:
+        arguments:
+            $defaultMaxScans: '%qr_default_max_scans%'
+            $defaultExpiresIn: '%qr_default_expires_in%'

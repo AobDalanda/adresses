@@ -1,0 +1,10 @@
+framework:
+    rate_limiter:
+        qr_scan:
+            policy: sliding_window
+            limit: '%env(int:QR_RATE_LIMIT)%'
+            interval: '%env(string:QR_RATE_INTERVAL)%'
+        qr_generate:
+            policy: sliding_window
+            limit: '%env(int:QR_GENERATE_RATE_LIMIT)%'
+            interval: '%env(string:QR_GENERATE_RATE_INTERVAL)%'

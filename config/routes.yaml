@@ -12,3 +12,18 @@ dev_evolution_qr:
     path: /dev/evolution/qr
     controller: App\Controller\EvolutionQrController::show
     methods: [GET]
+
+app_qrcode_show:
+    path: /api/qrcode/{token}
+    controller: App\Controller\QrCodeController::show
+    methods: [GET]
+
+app_qrcode_public:
+    path: /a/{token}
+    controller: App\Controller\QrCodeController::show
+    methods: [GET]
+
+app_generate_qrcode:
+    path: /api/generate-qr
+    controller: App\Controller\GenerateQrCodeController::generate
+    methods: [POST]
