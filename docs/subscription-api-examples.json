@@ -1,0 +1,62 @@
+{
+  "meSubscriptionSuccess": {
+    "success": true,
+    "subscription": {
+      "status": "active",
+      "plan": {
+        "code": "BASIC",
+        "name": "Basic",
+        "priceAmount": 50000,
+        "currency": "GNF"
+      },
+      "currentPeriodStart": "2026-05-16T10:00:00+00:00",
+      "currentPeriodEnd": "2026-06-15T23:59:59+00:00",
+      "expiresAt": "2026-06-15T23:59:59+00:00",
+      "autoRenew": false
+    },
+    "usage": {
+      "addresses": {
+        "used": 2,
+        "limit": 5
+      },
+      "qrCodes": {
+        "used": 1,
+        "limit": 5
+      },
+      "deliveriesThisMonth": {
+        "used": 7,
+        "limit": 20
+      }
+    },
+    "features": {
+      "canTrackDelivery": true,
+      "canUseCustomQrCode": false,
+      "canCreateBusinessAddress": false
+    }
+  },
+  "limitReached": {
+    "success": false,
+    "error": {
+      "code": "SUBSCRIPTION_LIMIT_REACHED",
+      "message": "Votre abonnement ne permet pas de creer une nouvelle adresse.",
+      "requiredPlan": "BASIC"
+    }
+  },
+  "checkoutSuccess": {
+    "success": true,
+    "checkout": {
+      "subscriptionId": 42,
+      "transactionId": 150,
+      "providerReference": "orange_money_9b3c4f1d22d3f9a1",
+      "status": "pending",
+      "instructions": {
+        "provider": "orange_money",
+        "phoneNumber": "+224620000000",
+        "amount": 50000,
+        "currency": "GNF",
+        "reference": "orange_money_9b3c4f1d22d3f9a1",
+        "message": "Validez le paiement sur votre téléphone pour finaliser votre abonnement."
+      }
+    }
+  }
+}

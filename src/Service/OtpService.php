@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Util\PhoneNumberNormalizer;
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
 
 class OtpService
 {
@@ -12,7 +13,8 @@ class OtpService
 
     public function __construct(
         private Connection $db,
-        private WhatsAppOtpClient $whatsAppOtpClient
+        private WhatsAppOtpClient $whatsAppOtpClient,
+        private LoggerInterface $logger
     ) {
     }
 
@@ -39,7 +41,14 @@ class OtpService
             ]
         );
 
-        $this->whatsAppOtpClient->sendOtp($phone, $otp);
+        try {
+            $this->whatsAppOtpClient->sendOtp($phone, $otp);
+        } catch (\Throwable $exception) {
+            $this->logger->warning('OTP stored but WhatsApp delivery failed.', [
+                'phone' => $phone,
+                'exception' => $exception,
+            ]);
+        }
     }
 
     public function verifyOtp(string $phone, string $otp): bool

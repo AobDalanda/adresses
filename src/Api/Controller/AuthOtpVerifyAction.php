@@ -47,15 +47,31 @@ final class AuthOtpVerifyAction
             return new JsonResponse(['message' => 'USER_NOT_FOUND'], 404);
         }
 
+        $tokenVersion = $this->userAccountService->rotateTokenVersion((int) $user['id']);
         $token = $this->jwt->issueToken([
             'sub' => $phone,
             'typ' => 'mobile',
             'uid' => $user['id'],
+            'tv' => $tokenVersion,
         ]);
 
         return new JsonResponse([
             'token' => $token,
-            'user' => $this->assetUrlResolver->enrich($user),
+            'user' => $this->userPayload($user),
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    private function userPayload(array $user): array
+    {
+        $payload = $this->assetUrlResolver->enrich($user);
+        $payload['email'] = isset($user['email']) && is_string($user['email']) && $user['email'] !== ''
+            ? $user['email']
+            : null;
+
+        return $payload;
     }
 }

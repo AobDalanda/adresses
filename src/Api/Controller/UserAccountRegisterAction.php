@@ -32,6 +32,11 @@ final class UserAccountRegisterAction
 
         $phone = $payload['phone'] ?? null;
         $fullName = $payload['fullName'] ?? $payload['name'] ?? null;
+        $email = $payload['email'] ?? null;
+        $identityDocumentNumber = $payload['identityDocumentNumber']
+            ?? $payload['identityNumber']
+            ?? $payload['documentNumber']
+            ?? null;
 
         if (!is_string($phone) || trim($phone) === '') {
             return new JsonResponse(['message' => 'phone est requis'], 400);
@@ -54,6 +59,38 @@ final class UserAccountRegisterAction
 
         if (strlen($fullName) > 100) {
             return new JsonResponse(['message' => 'fullName ne doit pas dépasser 100 caractères'], 400);
+        }
+
+        if ($email !== null && !is_string($email)) {
+            return new JsonResponse(['message' => 'email est invalide'], 400);
+        }
+
+        $email = is_string($email) ? strtolower(trim($email)) : null;
+        if ($email !== null && $email !== '') {
+            if (mb_strlen($email) > 180) {
+                return new JsonResponse(['message' => 'email ne doit pas dépasser 180 caractères'], 400);
+            }
+
+            if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                return new JsonResponse(['message' => 'email est invalide'], 400);
+            }
+        } else {
+            $email = null;
+        }
+
+        if ($identityDocumentNumber !== null && !is_string($identityDocumentNumber)) {
+            return new JsonResponse(['message' => 'identityDocumentNumber est invalide'], 400);
+        }
+
+        $identityDocumentNumber = is_string($identityDocumentNumber)
+            ? trim(preg_replace('/\s+/', ' ', $identityDocumentNumber) ?? $identityDocumentNumber)
+            : null;
+        if ($identityDocumentNumber === '') {
+            $identityDocumentNumber = null;
+        }
+
+        if ($identityDocumentNumber !== null && mb_strlen($identityDocumentNumber) > 100) {
+            return new JsonResponse(['message' => 'identityDocumentNumber ne doit pas dépasser 100 caractères'], 400);
         }
 
         $accountType = $this->normalizeAccountType($payload['accountType'] ?? 'client');
@@ -150,7 +187,9 @@ final class UserAccountRegisterAction
             $profilePhotoPath,
             $accountType,
             $identityDocumentPath,
-            $driverLicensePath
+            $driverLicensePath,
+            $email,
+            $identityDocumentNumber
         );
         if (
             $profilePhotoPath !== null

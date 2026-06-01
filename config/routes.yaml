@@ -27,3 +27,9 @@ app_generate_qrcode:
     path: /api/generate-qr
     controller: App\Controller\GenerateQrCodeController::generate
     methods: [POST]
+
+controllers:
+    resource:
+        path: ../src/Controller/
+        namespace: App\Controller
+    type: attribute

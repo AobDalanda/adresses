@@ -3,6 +3,7 @@
 namespace App\Api\Controller;
 
 use App\Service\JwtAuthService;
+use App\Service\Subscription\SubscriptionManager;
 use App\Service\OtpService;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
@@ -16,7 +17,8 @@ final class UserAccountRegisterVerifyAction
         private OtpService $otpService,
         private UserAccountService $userAccountService,
         private JwtAuthService $jwt,
-        private UserAccountAssetUrlResolver $assetUrlResolver
+        private UserAccountAssetUrlResolver $assetUrlResolver,
+        private SubscriptionManager $subscriptions
     ) {
     }
 
@@ -57,20 +59,42 @@ final class UserAccountRegisterVerifyAction
             $registration['profilePhotoPath'] ?? null,
             $registration['accountType'] ?? 'client',
             $registration['identityDocumentPath'] ?? null,
-            $registration['driverLicensePath'] ?? null
+            $registration['driverLicensePath'] ?? null,
+            $registration['email'] ?? null,
+            $registration['identityDocumentNumber'] ?? null
         );
 
         $this->userAccountService->markPendingRegistrationVerified($registration['id']);
+        $this->subscriptions->initializeFreeSubscription((int) $user['id']);
 
+        $tokenVersion = $this->userAccountService->rotateTokenVersion((int) $user['id']);
         $token = $this->jwt->issueToken([
             'sub' => $phone,
             'typ' => 'mobile',
             'uid' => $user['id'],
+            'tv' => $tokenVersion,
         ]);
 
         return new JsonResponse([
             'token' => $token,
-            'user' => $this->assetUrlResolver->enrich($user),
+            'user' => $this->userPayload($user),
         ], 201);
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    private function userPayload(array $user): array
+    {
+        $payload = $this->assetUrlResolver->enrich($user);
+        $payload['email'] = isset($user['email']) && is_string($user['email']) && $user['email'] !== ''
+            ? $user['email']
+            : null;
+        $payload['identityDocumentNumber'] = isset($user['identityDocumentNumber']) && is_string($user['identityDocumentNumber']) && $user['identityDocumentNumber'] !== ''
+            ? $user['identityDocumentNumber']
+            : null;
+
+        return $payload;
     }
 }

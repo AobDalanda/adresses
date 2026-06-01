@@ -42,7 +42,7 @@ class UserAccountController extends AbstractController
 
         $user = $this->db->fetchAssociative(
             "
-            SELECT id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            SELECT id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, identity_document_number, driver_license_path, created_at
             FROM user_account
             WHERE id = :id
             LIMIT 1
@@ -63,6 +63,7 @@ class UserAccountController extends AbstractController
             'accountType' => (string) $user['account_type'],
             'profilePhotoPath' => isset($user['profile_photo_path']) ? (string) $user['profile_photo_path'] : null,
             'identityDocumentPath' => isset($user['identity_document_path']) ? (string) $user['identity_document_path'] : null,
+            'identityDocumentNumber' => isset($user['identity_document_number']) && is_string($user['identity_document_number']) && $user['identity_document_number'] !== '' ? $user['identity_document_number'] : null,
             'driverLicensePath' => isset($user['driver_license_path']) ? (string) $user['driver_license_path'] : null,
             'createdAt' => $user['created_at'],
         ]));

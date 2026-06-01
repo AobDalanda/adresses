@@ -2,6 +2,10 @@
 
 namespace App\Service;
 
+use App\Entity\UserAccount;
+use App\Service\Subscription\PlanLimitChecker;
+use App\Service\Subscription\SubscriptionManager;
+use App\Service\Subscription\UsageCounterManager;
 use Doctrine\DBAL\Connection;
 
 final class AddressQrCodeService
@@ -9,6 +13,9 @@ final class AddressQrCodeService
     public function __construct(
         private Connection $db,
         private QrTokenGenerator $tokenGenerator,
+        private SubscriptionManager $subscriptions,
+        private PlanLimitChecker $planLimits,
+        private UsageCounterManager $usageCounters,
         private int $defaultMaxScans = 100,
         private string $defaultExpiresIn = '365 days'
     ) {
@@ -19,6 +26,9 @@ final class AddressQrCodeService
      */
     public function generateForUser(int $userId, int $addressId): array
     {
+        $user = $this->subscriptions->getUser($userId);
+        $this->planLimits->assertCanGenerateQrCode($user);
+
         $ownsAddress = (bool) $this->db->fetchOne(
             '
             SELECT EXISTS(
@@ -73,6 +83,8 @@ final class AddressQrCodeService
             $this->db->rollBack();
             throw $e;
         }
+
+        $this->usageCounters->incrementQrCodesGenerated($user, $this->subscriptions->getActiveSubscription($user));
 
         return [
             'token' => $token,

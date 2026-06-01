@@ -9,6 +9,7 @@ class JwtAuthService
 {
     public function __construct(
         private JWTEncoderInterface $encoder,
+        private UserAccountService $users,
         private int $tokenTtlSeconds = 3600
     ) {
     }
@@ -56,6 +57,17 @@ class JwtAuthService
 
         if (!isset($payload['exp']) || (int) $payload['exp'] < time()) {
             return null;
+        }
+
+        if (($payload['typ'] ?? null) === 'mobile') {
+            if (!isset($payload['uid'], $payload['tv'])) {
+                return null;
+            }
+
+            $currentTokenVersion = $this->users->findTokenVersionById((int) $payload['uid']);
+            if ($currentTokenVersion === null || $currentTokenVersion !== (int) $payload['tv']) {
+                return null;
+            }
         }
 
         return $payload;

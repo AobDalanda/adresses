@@ -100,4 +100,142 @@ final class UserAddressService
             throw $e;
         }
     }
+
+    public function setDefaultAddress(int $userId, int $addressId): bool
+    {
+        $this->db->beginTransaction();
+
+        try {
+            $exists = (bool) $this->db->fetchOne(
+                '
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM user_address
+                    WHERE user_id = :userId
+                      AND address_id = :addressId
+                )
+                ',
+                [
+                    'userId' => $userId,
+                    'addressId' => $addressId,
+                ]
+            );
+
+            if (!$exists) {
+                $this->db->rollBack();
+
+                return false;
+            }
+
+            $this->db->executeStatement(
+                'UPDATE user_address SET is_primary = false WHERE user_id = :userId',
+                ['userId' => $userId]
+            );
+
+            $this->db->executeStatement(
+                '
+                UPDATE user_address
+                SET is_primary = true
+                WHERE user_id = :userId
+                  AND address_id = :addressId
+                ',
+                [
+                    'userId' => $userId,
+                    'addressId' => $addressId,
+                ]
+            );
+
+            $this->db->commit();
+
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function isDefaultAddress(int $userId, int $addressId): ?bool
+    {
+        $row = $this->db->fetchAssociative(
+            '
+            SELECT is_primary
+            FROM user_address
+            WHERE user_id = :userId
+              AND address_id = :addressId
+            LIMIT 1
+            ',
+            [
+                'userId' => $userId,
+                'addressId' => $addressId,
+            ]
+        );
+
+        if ($row === false) {
+            return null;
+        }
+
+        return (bool) $row['is_primary'];
+    }
+
+    public function deleteUserAddress(int $userId, int $addressId): bool
+    {
+        $this->db->beginTransaction();
+
+        try {
+            $link = $this->db->fetchAssociative(
+                '
+                SELECT id, is_primary
+                FROM user_address
+                WHERE user_id = :userId
+                  AND address_id = :addressId
+                LIMIT 1
+                ',
+                [
+                    'userId' => $userId,
+                    'addressId' => $addressId,
+                ]
+            );
+
+            if ($link === false) {
+                $this->db->rollBack();
+
+                return false;
+            }
+
+            $this->db->executeStatement(
+                '
+                DELETE FROM user_address
+                WHERE user_id = :userId
+                  AND address_id = :addressId
+                ',
+                [
+                    'userId' => $userId,
+                    'addressId' => $addressId,
+                ]
+            );
+
+            $remainingOwnerCount = (int) $this->db->fetchOne(
+                '
+                SELECT COUNT(*)
+                FROM user_address
+                WHERE address_id = :addressId
+                ',
+                ['addressId' => $addressId]
+            );
+
+            if ($remainingOwnerCount === 0) {
+                $this->db->executeStatement(
+                    'DELETE FROM address WHERE id = :addressId',
+                    ['addressId' => $addressId]
+                );
+            }
+
+            $this->db->commit();
+
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
 }

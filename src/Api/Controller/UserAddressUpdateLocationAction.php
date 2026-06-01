@@ -2,7 +2,10 @@
 
 namespace App\Api\Controller;
 
+use App\Enum\SubscriptionPlanCode;
+use App\Exception\NoActiveSubscriptionException;
 use App\Service\JwtAuthService;
+use App\Service\Subscription\SubscriptionManager;
 use App\Service\UpdateConnectedUserAddressService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -10,12 +13,13 @@ use Symfony\Component\HttpFoundation\Request;
 final class UserAddressUpdateLocationAction
 {
     public function __construct(
-        private JwtAuthService $jwt,
-        private UpdateConnectedUserAddressService $updateAddress
+        private readonly JwtAuthService $jwt,
+        private readonly SubscriptionManager $subscriptions,
+        private readonly UpdateConnectedUserAddressService $updateAddress
     ) {
     }
 
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ?int $addressId = null): JsonResponse
     {
         $auth = $this->jwt->decodeFromRequest($request);
         if (!$auth || ($auth['typ'] ?? null) !== 'mobile' || !isset($auth['uid'])) {
@@ -29,6 +33,7 @@ final class UserAddressUpdateLocationAction
 
         $latitude = $payload['latitude'] ?? null;
         $longitude = $payload['longitude'] ?? null;
+        $label = $payload['label'] ?? $payload['displayLabel'] ?? null;
 
         if (!is_numeric($latitude) || !is_numeric($longitude)) {
             return new JsonResponse(['message' => 'latitude et longitude sont requis'], 400);
@@ -61,9 +66,47 @@ final class UserAddressUpdateLocationAction
             return new JsonResponse(['message' => 'reason doit etre une chaine'], 400);
         }
 
+        if ($label !== null && (!is_string($label) || trim($label) === '')) {
+            return new JsonResponse(['message' => 'label doit etre une chaine non vide'], 400);
+        }
+
+        if ($addressId !== null && $addressId <= 0) {
+            return new JsonResponse(['message' => 'addressId est invalide'], 400);
+        }
+
         $phone = (string) ($auth['sub'] ?? '');
         if ($phone === '') {
             return new JsonResponse(['message' => 'Token invalide'], 401);
+        }
+
+        try {
+            $user = $this->subscriptions->getUser((int) $auth['uid']);
+            $subscription = $this->subscriptions->getActiveSubscription($user);
+            $planCode = $subscription->getPlan()->getCode();
+        } catch (NoActiveSubscriptionException) {
+            return new JsonResponse([
+                'success' => false,
+                'error' => [
+                    'code' => 'ACTIVE_SUBSCRIPTION_REQUIRED',
+                    'message' => 'Un abonnement actif est requis pour modifier une adresse.',
+                ],
+            ], 403);
+        } catch (\Throwable) {
+            return new JsonResponse(['message' => 'Erreur lors de la vérification de l’abonnement'], 500);
+        }
+
+        if (!in_array($planCode, [SubscriptionPlanCode::PREMIUM, SubscriptionPlanCode::BUSINESS], true)) {
+            return new JsonResponse([
+                'success' => false,
+                'error' => [
+                    'code' => 'SUBSCRIPTION_PLAN_REQUIRED',
+                    'message' => 'La modification d’adresse est réservée aux abonnements Premium et Business.',
+                    'requiredPlans' => [
+                        SubscriptionPlanCode::PREMIUM->value,
+                        SubscriptionPlanCode::BUSINESS->value,
+                    ],
+                ],
+            ], 403);
         }
 
         try {
@@ -71,6 +114,8 @@ final class UserAddressUpdateLocationAction
                 (int) $auth['uid'],
                 $phone,
                 [
+                    'addressId' => $addressId,
+                    'label' => is_string($label) ? trim($label) : null,
                     'latitude' => $latitude,
                     'longitude' => $longitude,
                     'plus_code' => $payload['plusCode'] ?? $payload['plus_code'] ?? null,

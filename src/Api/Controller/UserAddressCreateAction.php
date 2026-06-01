@@ -4,7 +4,9 @@ namespace App\Api\Controller;
 
 use App\Service\CreateConnectedUserAddressService;
 use App\Service\JwtAuthService;
-use App\Service\SubscriptionService;
+use App\Service\Subscription\PlanLimitChecker;
+use App\Service\Subscription\SubscriptionManager;
+use App\Service\Subscription\UsageCounterManager;
 use App\Service\UserAddressService;
 use App\Util\PhoneNumberNormalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -15,8 +17,10 @@ final class UserAddressCreateAction
     public function __construct(
         private JwtAuthService $jwt,
         private CreateConnectedUserAddressService $createAddress,
-        private SubscriptionService $subscriptions,
-        private UserAddressService $userAddresses
+        private SubscriptionManager $subscriptions,
+        private UserAddressService $userAddresses,
+        private PlanLimitChecker $planLimits,
+        private UsageCounterManager $usageCounters
     ) {
     }
 
@@ -77,11 +81,19 @@ final class UserAddressCreateAction
         }
 
         $userId = (int) $auth['uid'];
-        $subscription = $this->subscriptions->getActiveSubscription('USER', $userId);
-        if ($subscription === null && $this->userAddresses->findUserAddress($userId) !== null) {
+        $user = $this->subscriptions->getUser($userId);
+
+        try {
+            $this->planLimits->assertCanCreateAddress($user);
+        } catch (\App\Exception\SubscriptionLimitReachedException $e) {
             return new JsonResponse([
-                'message' => 'Abonnement requis pour créer une nouvelle adresse',
-            ], 403);
+                'success' => false,
+                'error' => [
+                    'code' => $e->getErrorCode(),
+                    'message' => $e->getMessage(),
+                    'requiredPlan' => $e->getRequiredPlan(),
+                ],
+            ], 402);
         }
 
         $contactPhone = null;
@@ -114,6 +126,9 @@ final class UserAddressCreateAction
         } catch (\Throwable) {
             return new JsonResponse(['message' => 'Erreur lors de la création de l’adresse utilisateur'], 500);
         }
+
+        $subscription = $this->subscriptions->getActiveSubscription($user);
+        $this->usageCounters->incrementAddressesCreated($user, $subscription);
 
         return new JsonResponse($result, 201);
     }

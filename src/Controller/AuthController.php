@@ -41,6 +41,10 @@ class AuthController extends AbstractController
             return $this->json(['message' => 'phone est invalide'], 400);
         }
 
+        if (!$this->userAccountService->verifiedUserExists($phone)) {
+            return $this->json(['message' => 'USER_NOT_FOUND'], 404);
+        }
+
         try {
             $this->otpService->requestOtp($phone);
         } catch (\Throwable $e) {
@@ -94,15 +98,31 @@ class AuthController extends AbstractController
             $this->userAccountService->markPendingRegistrationVerified($registration['id']);
         }
 
+        $tokenVersion = $this->userAccountService->rotateTokenVersion((int) $user['id']);
         $token = $this->jwt->issueToken([
             'sub' => $phone,
             'typ' => 'mobile',
             'uid' => $user['id'],
+            'tv' => $tokenVersion,
         ]);
 
         return $this->json([
             'token' => $token,
-            'user' => $this->assetUrlResolver->enrich($user),
+            'user' => $this->userPayload($user),
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    private function userPayload(array $user): array
+    {
+        $payload = $this->assetUrlResolver->enrich($user);
+        $payload['email'] = isset($user['email']) && is_string($user['email']) && $user['email'] !== ''
+            ? $user['email']
+            : null;
+
+        return $payload;
     }
 }

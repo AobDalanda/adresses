@@ -26,7 +26,7 @@ final class ConnectedUserOverviewService
     {
         $user = $this->db->fetchAssociative(
             '
-            SELECT id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, driver_license_path, created_at
+            SELECT id, phone, name, email, verified, account_type, profile_photo_path, identity_document_path, identity_document_number, driver_license_path, created_at
             FROM user_account
             WHERE id = :id
             LIMIT 1
@@ -46,6 +46,7 @@ final class ConnectedUserOverviewService
                 a.id AS address_id,
                 a.address_code,
                 a.display_label,
+                av.reason AS description,
                 a.phone_display,
                 a.contact_phone,
                 a.created_at,
@@ -58,6 +59,13 @@ final class ConnectedUserOverviewService
             JOIN address a ON a.id = ua.address_id
             LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
             LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
+            LEFT JOIN LATERAL (
+                SELECT reason
+                FROM address_version av
+                WHERE av.address_id = a.id
+                ORDER BY av.versioned_at DESC, av.id DESC
+                LIMIT 1
+            ) av ON true
             WHERE ua.user_id = :userId
             ORDER BY ua.is_primary DESC, ua.id DESC
             ',
@@ -100,6 +108,7 @@ final class ConnectedUserOverviewService
                 'accountType' => (string) $user['account_type'],
                 'profilePhotoPath' => isset($user['profile_photo_path']) ? (string) $user['profile_photo_path'] : null,
                 'identityDocumentPath' => isset($user['identity_document_path']) ? (string) $user['identity_document_path'] : null,
+                'identityDocumentNumber' => isset($user['identity_document_number']) && is_string($user['identity_document_number']) && $user['identity_document_number'] !== '' ? $user['identity_document_number'] : null,
                 'driverLicensePath' => isset($user['driver_license_path']) ? (string) $user['driver_license_path'] : null,
                 'createdAt' => $user['created_at'],
             ]),
@@ -110,6 +119,7 @@ final class ConnectedUserOverviewService
                     'identifier' => AddressQrCodec::encode((int) $row['address_id']),
                     'addressCode' => (string) $row['address_code'],
                     'displayLabel' => $row['display_label'] !== null ? (string) $row['display_label'] : null,
+                    'description' => $row['description'] !== null ? (string) $row['description'] : null,
                     'phoneDisplay' => $row['phone_display'] !== null ? (string) $row['phone_display'] : null,
                     'contactPhone' => $row['contact_phone'] !== null ? (string) $row['contact_phone'] : null,
                     'location' => [

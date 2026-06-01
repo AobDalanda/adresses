@@ -27,6 +27,9 @@ parameters:
     qr_brute_force_block_time: '%env(string:QR_BRUTE_FORCE_BLOCK_TIME)%'
     qr_default_max_scans: '%env(int:QR_DEFAULT_MAX_SCANS)%'
     qr_default_expires_in: '%env(string:QR_DEFAULT_EXPIRES_IN)%'
+    orange_money_webhook_secret: '%env(default::ORANGE_MONEY_WEBHOOK_SECRET)%'
+    mtn_money_webhook_secret: '%env(default::MTN_MONEY_WEBHOOK_SECRET)%'
+    stripe_webhook_secret: '%env(default::STRIPE_WEBHOOK_SECRET)%'
 
 services:
     # default configuration for services in *this* file
@@ -90,6 +93,25 @@ services:
     App\Service\PaymentService:
         arguments:
             $providers: !tagged_iterator app.payment_provider
+
+    App\Service\Subscription\OrangeMoneyPaymentGateway:
+        arguments:
+            $signingSecret: '%orange_money_webhook_secret%'
+        tags: ['app.subscription_payment_gateway']
+
+    App\Service\Subscription\MtnMoneyPaymentGateway:
+        arguments:
+            $signingSecret: '%mtn_money_webhook_secret%'
+        tags: ['app.subscription_payment_gateway']
+
+    App\Service\Subscription\StripePaymentGateway:
+        arguments:
+            $webhookSecret: '%stripe_webhook_secret%'
+        tags: ['app.subscription_payment_gateway']
+
+    App\Service\Subscription\PaymentManager:
+        arguments:
+            $paymentGateways: !tagged_iterator app.subscription_payment_gateway
 
     App\Service\SupabaseStorageClient:
         arguments:

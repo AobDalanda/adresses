@@ -30,9 +30,9 @@ final class QrScanLogger
         $this->db->insert('qr_scan_logs', [
             'token' => $context['token'],
             'scanned_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'ip' => $context['ip'],
+            'ip_address' => $context['ip'],
             'user_agent' => $context['user_agent'],
-            'user_id' => $context['user_id'],
+            'authenticated_user_id' => $context['user_id'],
             'device' => $context['device'],
             'country' => $context['country'],
             'city' => $context['city'],

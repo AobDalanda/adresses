@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Service\AddressQrCodeService;
 use App\Service\JwtAuthService;
 use App\Service\QrCodeBruteForceGuard;
+use App\Service\Subscription\SubscriptionManager;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,6 +20,7 @@ final class GenerateQrCodeController extends AbstractController
         private JwtAuthService $jwt,
         private AddressQrCodeService $qrCodes,
         private QrCodeBruteForceGuard $bruteForceGuard,
+        private SubscriptionManager $subscriptions,
         private LoggerInterface $logger,
         private RateLimiterFactory $qrGenerateRateLimiter
     ) {

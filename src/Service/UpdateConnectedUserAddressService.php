@@ -19,6 +19,8 @@ final class UpdateConnectedUserAddressService
 
     /**
      * @param array{
+     *     addressId?: ?int,
+     *     label?: ?string,
      *     latitude: float,
      *     longitude: float,
      *     plus_code?: ?string,
@@ -42,6 +44,12 @@ final class UpdateConnectedUserAddressService
      */
     public function updateCurrentUserAddress(int $userId, string $phone, array $payload, ?string $clientIp = null): array
     {
+        $requestedAddressId = isset($payload['addressId']) && is_int($payload['addressId']) && $payload['addressId'] > 0
+            ? $payload['addressId']
+            : null;
+        $label = isset($payload['label']) && is_string($payload['label']) && trim($payload['label']) !== ''
+            ? trim($payload['label'])
+            : null;
         $latitude = $payload['latitude'];
         $longitude = $payload['longitude'];
         $providedPlusCode = isset($payload['plus_code']) ? strtoupper(trim((string) $payload['plus_code'])) : null;
@@ -56,26 +64,51 @@ final class UpdateConnectedUserAddressService
         $this->db->beginTransaction();
 
         try {
-            $currentAddress = $this->db->fetchAssociative(
-                '
-                SELECT
-                    a.id AS address_id,
-                    a.display_label,
-                    ua.is_primary
-                FROM user_address ua
-                JOIN address a ON a.id = ua.address_id
-                WHERE ua.user_id = :userId
-                ORDER BY ua.is_primary DESC, ua.id DESC
-                LIMIT 1
-                ',
-                ['userId' => $userId]
-            );
+            if ($requestedAddressId !== null) {
+                $currentAddress = $this->db->fetchAssociative(
+                    '
+                    SELECT
+                        a.id AS address_id,
+                        a.display_label,
+                        ua.is_primary
+                    FROM user_address ua
+                    JOIN address a ON a.id = ua.address_id
+                    WHERE ua.user_id = :userId
+                      AND a.id = :addressId
+                    LIMIT 1
+                    ',
+                    [
+                        'userId' => $userId,
+                        'addressId' => $requestedAddressId,
+                    ]
+                );
+            } else {
+                $currentAddress = $this->db->fetchAssociative(
+                    '
+                    SELECT
+                        a.id AS address_id,
+                        a.display_label,
+                        ua.is_primary
+                    FROM user_address ua
+                    JOIN address a ON a.id = ua.address_id
+                    WHERE ua.user_id = :userId
+                    ORDER BY ua.is_primary DESC, ua.id DESC
+                    LIMIT 1
+                    ',
+                    ['userId' => $userId]
+                );
+            }
 
             if ($currentAddress === false) {
+                if ($requestedAddressId !== null) {
+                    throw new \InvalidArgumentException('Adresse non liée à cet utilisateur');
+                }
+
                 throw new \InvalidArgumentException('Aucune adresse trouvée pour cet utilisateur');
             }
 
             $addressId = (int) $currentAddress['address_id'];
+            $displayLabel = $label ?? ($currentAddress['display_label'] !== null ? (string) $currentAddress['display_label'] : null);
 
             $gpsPointId = (int) $this->db->fetchOne(
                 "
@@ -205,6 +238,7 @@ final class UpdateConnectedUserAddressService
                 "
                 UPDATE address
                 SET address_code = :addressCode,
+                    display_label = :displayLabel,
                     geo_cell_id = :geoCellId,
                     plus_code_id = :plusCodeId,
                     weighted_location_id = :weightedLocationId,
@@ -213,6 +247,7 @@ final class UpdateConnectedUserAddressService
                 ",
                 [
                     'addressCode' => $addressCode,
+                    'displayLabel' => $displayLabel,
                     'geoCellId' => $geoCellId,
                     'plusCodeId' => $plusCodeId,
                     'weightedLocationId' => $weightedLocationId,
@@ -261,7 +296,7 @@ final class UpdateConnectedUserAddressService
             return [
                 'addressId' => $addressId,
                 'addressCode' => $addressCode,
-                'displayLabel' => $currentAddress['display_label'] !== null ? (string) $currentAddress['display_label'] : null,
+                'displayLabel' => $displayLabel,
                 'plusCode' => $resolvedPlusCode,
                 'latitude' => $latitude,
                 'longitude' => $longitude,
