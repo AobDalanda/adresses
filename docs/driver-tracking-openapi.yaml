@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: Driver Tracking API
+  version: 1.0.0
+  description: API de suivi GPS temps reel des livreurs.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /drivers/location:
+    post:
+      tags: [Driver tracking]
+      summary: Enregistrer et publier une position GPS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverLocationInput'
+            example:
+              driverId: 15
+              latitude: 9.6412
+              longitude: -13.5784
+              accuracy: 5.3
+              speed: 18.5
+              heading: 220
+              batteryLevel: 74
+              source: gps
+      responses:
+        '201':
+          description: Position enregistree
+          content:
+            application/json:
+              example:
+                success: true
+        '401':
+          description: JWT absent ou invalide
+        '403':
+          description: Le driverId ne correspond pas au livreur authentifie
+        '422':
+          description: Erreur de validation
+  /drivers/{id}/location:
+    get:
+      tags: [Driver tracking]
+      summary: Derniere position connue
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Derniere position
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LastDriverLocation'
+              example:
+                driverId: 15
+                latitude: 9.6412
+                longitude: -13.5784
+                speed: 18.5
+                heading: 220
+                updatedAt: '2026-06-05T10:30:00+00:00'
+        '404':
+          description: Aucune position connue
+  /drivers/{id}/locations:
+    get:
+      tags: [Driver tracking]
+      summary: Historique GPS
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+      responses:
+        '200':
+          description: Historique du plus recent au plus ancien
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  driverId: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/DriverLocationHistoryItem' }
+                  count: { type: integer }
+                  limit: { type: integer }
+  /drivers/{id}/mercure-authorization:
+    post:
+      tags: [Driver tracking]
+      summary: Autoriser l'abonnement au topic Mercure prive
+      description: >
+        Verifie le JWT et les droits de consultation, puis emet un cookie
+        HTTP-only mercureAuthorization limite au topic du livreur.
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Cookie d'autorisation Mercure emis
+          headers:
+            Set-Cookie:
+              description: Cookie HTTP-only mercureAuthorization
+              schema: { type: string }
+          content:
+            application/json:
+              example:
+                hubUrl: 'https://example.com/.well-known/mercure'
+                topic: 'driver/15/location'
+        '401':
+          description: JWT absent ou invalide
+        '403':
+          description: Consultation interdite pour ce livreur
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DriverId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+  schemas:
+    DriverLocationInput:
+      type: object
+      required: [driverId, latitude, longitude, accuracy]
+      properties:
+        driverId: { type: integer, minimum: 1 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        accuracy: { type: number, minimum: 0 }
+        speed: { type: [number, 'null'], minimum: 0 }
+        heading: { type: [number, 'null'], minimum: 0, maximum: 360 }
+        batteryLevel: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        source: { type: string, default: gps, maxLength: 30 }
+    LastDriverLocation:
+      type: object
+      properties:
+        driverId: { type: integer }
+        latitude: { type: number }
+        longitude: { type: number }
+        speed: { type: [number, 'null'] }
+        heading: { type: [number, 'null'] }
+        updatedAt: { type: string, format: date-time }
+    DriverLocationHistoryItem:
+      allOf:
+        - $ref: '#/components/schemas/LastDriverLocation'
+        - type: object
+          properties:
+            accuracy: { type: number }
+            batteryLevel: { type: [integer, 'null'] }
+            source: { type: string }
+            createdAt: { type: string, format: date-time }
+x-mercure:
+  hub: /.well-known/mercure
+  topic: driver/{driverId}/location
+  private: true
+  anonymous: false
+  authorizationEndpoint: /api/v1/drivers/{driverId}/mercure-authorization
+  event:
+    example:
+      driverId: 15
+      latitude: 9.6412
+      longitude: -13.5784
+      accuracy: 5.3
+      speed: 18.5
+      heading: 220
+      timestamp: 1780655400
