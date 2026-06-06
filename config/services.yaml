@@ -52,6 +52,41 @@ services:
         arguments:
             $tokenTtlSeconds: '%jwt_ttl%'
 
+    App\Repository\DriverLocationRepositoryInterface:
+        alias: App\Repository\DriverLocationRepository
+
+    App\Service\Tracking\LocationPublisherInterface:
+        alias: App\Service\Tracking\LocationPublisher
+
+    App\Api\Controller\DriverLocationUpdateAction:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+        tags: ['controller.service_arguments']
+
+    App\Api\Controller\DriverLocationLastAction:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+        tags: ['controller.service_arguments']
+
+    App\Api\Controller\DriverLocationHistoryAction:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+        tags: ['controller.service_arguments']
+
+    App\Api\Controller\DriverLocationMercureAuthorizationAction:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+            $mercureAuthorization: '@Symfony\Component\Mercure\Authorization'
+        tags: ['controller.service_arguments']
+
+    App\Service\Tracking\LocationPublisher:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+
+    App\Service\Tracking\DriverTrackingService:
+        arguments:
+            $trackingLogger: '@monolog.logger.tracking'
+
     App\Service\FcmPushClient:
         arguments:
             $credentialsPath: '%firebase_credentials%'

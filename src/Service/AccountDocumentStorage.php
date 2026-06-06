@@ -24,6 +24,11 @@ class AccountDocumentStorage
         return $this->storePdf($file, $this->driverLicenseBucket, 'driver-licenses');
     }
 
+    public function store(UploadedFile $file, string $prefix): string
+    {
+        return $this->storePdf($file, $this->identityBucket, $prefix);
+    }
+
     public function deleteIfStored(?string $publicPath): void
     {
         $this->storage->deleteIfStored($publicPath);

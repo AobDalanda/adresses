@@ -53,3 +53,8 @@ Thumbs.db
 
 # Firebase service account key
 /config/firebase/service-account.json
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
