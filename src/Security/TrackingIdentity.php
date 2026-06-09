@@ -12,7 +12,9 @@ final readonly class TrackingIdentity
     public function __construct(
         public ?int $userId,
         public string $accountType,
-        public array $roles
+        public array $roles,
+        public bool $canDeliver = false,
+        public bool $providerApproved = false
     ) {
     }
 
@@ -23,6 +25,12 @@ final readonly class TrackingIdentity
 
     public function isDriver(): bool
     {
-        return in_array(strtolower($this->accountType), ['driver', 'livreur'], true);
+        if (in_array(strtolower($this->accountType), ['driver', 'livreur'], true)) {
+            return true;
+        }
+
+        return strtolower($this->accountType) === 'provider'
+            && $this->canDeliver
+            && $this->providerApproved;
     }
 }

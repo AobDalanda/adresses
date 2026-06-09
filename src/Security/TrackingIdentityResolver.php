@@ -6,13 +6,15 @@ namespace App\Security;
 
 use App\Repository\UserAccountRepository;
 use App\Service\JwtAuthService;
+use App\Service\ProviderProfileService;
 use Symfony\Component\HttpFoundation\Request;
 
 final readonly class TrackingIdentityResolver
 {
     public function __construct(
         private JwtAuthService $jwt,
-        private UserAccountRepository $users
+        private UserAccountRepository $users,
+        private ProviderProfileService $providerProfiles
     ) {
     }
 
@@ -42,6 +44,16 @@ final readonly class TrackingIdentityResolver
             return null;
         }
 
-        return new TrackingIdentity($userId, $user->getAccountType(), $roles);
+        $providerProfile = $user->getAccountType() === 'provider'
+            ? $this->providerProfiles->findByUserId($userId)
+            : null;
+
+        return new TrackingIdentity(
+            $userId,
+            $user->getAccountType(),
+            $roles,
+            (bool) ($providerProfile['canDeliver'] ?? false),
+            ($providerProfile['validationStatus'] ?? null) === 'approved'
+        );
     }
 }

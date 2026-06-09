@@ -57,6 +57,12 @@ final class AuthOtpVerifyAction
 
         return new JsonResponse([
             'token' => $token,
+            'refreshToken' => $this->jwt->issueToken([
+                'sub' => $phone,
+                'typ' => 'mobile_refresh',
+                'uid' => $user['id'],
+                'tv' => $tokenVersion,
+            ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
         ]);
     }

@@ -22,12 +22,11 @@ final class AddressQrCodeService
     }
 
     /**
-     * @return array{token: string, expires_at: string, max_scans: int}
+     * @return array{token: string, expires_at: string, max_scans: int, reused: bool}
      */
     public function generateForUser(int $userId, int $addressId): array
     {
         $user = $this->subscriptions->getUser($userId);
-        $this->planLimits->assertCanGenerateQrCode($user);
 
         $ownsAddress = (bool) $this->db->fetchOne(
             '
@@ -47,6 +46,38 @@ final class AddressQrCodeService
         if (!$ownsAddress) {
             throw new \DomainException('Cette adresse ne vous appartient pas');
         }
+
+        $existingQrCode = $this->db->fetchAssociative(
+            '
+            SELECT token, expires_at, max_scans
+            FROM address_qrcodes
+            WHERE address_id = :addressId
+              AND created_by = :userId
+              AND is_active = true
+              AND revoked_at IS NULL
+              AND expires_at > now()
+              AND (max_scans IS NULL OR current_scans < max_scans)
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            ',
+            [
+                'addressId' => $addressId,
+                'userId' => $userId,
+            ]
+        );
+
+        if ($existingQrCode !== false) {
+            return [
+                'token' => (string) $existingQrCode['token'],
+                'expires_at' => (new \DateTimeImmutable((string) $existingQrCode['expires_at']))
+                    ->setTimezone(new \DateTimeZone('UTC'))
+                    ->format(\DateTimeInterface::ATOM),
+                'max_scans' => (int) $existingQrCode['max_scans'],
+                'reused' => true,
+            ];
+        }
+
+        $this->planLimits->assertCanGenerateQrCode($user);
 
         $expiresAt = (new \DateTimeImmutable())->modify(sprintf('+%s', trim($this->defaultExpiresIn)));
         if (!$expiresAt instanceof \DateTimeImmutable) {
@@ -90,6 +121,7 @@ final class AddressQrCodeService
             'token' => $token,
             'expires_at' => $expiresAt->setTimezone(new \DateTimeZone('UTC'))->format(\DateTimeInterface::ATOM),
             'max_scans' => $this->defaultMaxScans,
+            'reused' => false,
         ];
     }
 }

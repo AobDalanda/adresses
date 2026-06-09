@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Exception\SubscriptionLimitReachedException;
 use App\Service\AddressQrCodeService;
 use App\Service\JwtAuthService;
 use App\Service\QrCodeBruteForceGuard;
@@ -101,6 +102,13 @@ final class GenerateQrCodeController extends AbstractController
                 'success' => true,
                 'data' => $result,
             ], 201);
+        } catch (SubscriptionLimitReachedException $e) {
+            return $this->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'code' => $e->getErrorCode(),
+                'requiredPlan' => $e->getRequiredPlan(),
+            ], 403);
         } catch (\DomainException $e) {
             $this->bruteForceGuard->registerInvalidAttempt($clientIp, 'generate');
 

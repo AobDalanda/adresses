@@ -46,6 +46,9 @@ class UserAccount
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
+    #[ORM\OneToOne(mappedBy: 'user', targetEntity: ProviderProfile::class)]
+    private ?ProviderProfile $providerProfile = null;
+
     /** @var Collection<int, UserSubscription> */
     #[ORM\OneToMany(mappedBy: 'user', targetEntity: UserSubscription::class)]
     private Collection $subscriptions;
@@ -124,6 +127,11 @@ class UserAccount
         $this->accountType = $accountType;
 
         return $this;
+    }
+
+    public function getProviderProfile(): ?ProviderProfile
+    {
+        return $this->providerProfile;
     }
 
     public function getCreatedAt(): \DateTimeImmutable

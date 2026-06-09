@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\ProviderProfileService;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
@@ -19,7 +20,8 @@ class AuthController extends AbstractController
         private OtpService $otpService,
         private UserAccountService $userAccountService,
         private JwtAuthService $jwt,
-        private UserAccountAssetUrlResolver $assetUrlResolver
+        private UserAccountAssetUrlResolver $assetUrlResolver,
+        private ?ProviderProfileService $providerProfiles = null
     ) {
     }
 
@@ -84,15 +86,23 @@ class AuthController extends AbstractController
             $resolvedName = $registration['fullName'];
         }
 
+        $legacyAccountType = $registration['accountType'] ?? 'client';
         $user = $this->userAccountService->upsertUserAccount(
             $phone,
             $resolvedName,
             true,
             $registration['profilePhotoPath'] ?? null,
-            $registration['accountType'] ?? 'client',
+            $legacyAccountType === 'client' ? 'client' : 'provider',
             $registration['identityDocumentPath'] ?? null,
             $registration['driverLicensePath'] ?? null
         );
+        if ($legacyAccountType !== 'client' && $this->providerProfiles !== null) {
+            $this->providerProfiles->submitActivities(
+                (int) $user['id'],
+                in_array($legacyAccountType, ['livreur', 'driver', 'driver_transport', 'both'], true),
+                in_array($legacyAccountType, ['transporteur', 'transporter', 'driver_transport', 'both'], true)
+            );
+        }
 
         if ($registration) {
             $this->userAccountService->markPendingRegistrationVerified($registration['id']);
@@ -108,6 +118,12 @@ class AuthController extends AbstractController
 
         return $this->json([
             'token' => $token,
+            'refreshToken' => $this->jwt->issueToken([
+                'sub' => $phone,
+                'typ' => 'mobile_refresh',
+                'uid' => $user['id'],
+                'tv' => $tokenVersion,
+            ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
         ]);
     }

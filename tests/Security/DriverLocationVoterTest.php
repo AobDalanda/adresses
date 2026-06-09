@@ -39,4 +39,20 @@ final class DriverLocationVoterTest extends TestCase
         self::assertTrue($this->voter->canAccess(DriverLocationVoter::VIEW, $identity, 15));
         self::assertFalse($this->voter->canAccess(DriverLocationVoter::PUBLISH, $identity, 15));
     }
+
+    public function testApprovedDeliveryProviderCanPublishOwnLocation(): void
+    {
+        $identity = new TrackingIdentity(15, 'provider', [], true, true);
+
+        self::assertTrue($this->voter->canAccess(DriverLocationVoter::PUBLISH, $identity, 15));
+    }
+
+    public function testPendingOrTransportOnlyProviderCannotPublishLocation(): void
+    {
+        $pending = new TrackingIdentity(15, 'provider', [], true, false);
+        $transportOnly = new TrackingIdentity(15, 'provider', [], false, true);
+
+        self::assertFalse($this->voter->canAccess(DriverLocationVoter::PUBLISH, $pending, 15));
+        self::assertFalse($this->voter->canAccess(DriverLocationVoter::PUBLISH, $transportOnly, 15));
+    }
 }

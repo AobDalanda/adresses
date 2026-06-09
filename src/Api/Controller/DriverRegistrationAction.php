@@ -6,10 +6,14 @@ use App\Dto\DriverRegistrationInput;
 use App\Service\DriverRegistrationService;
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\ProviderProfileService;
 use App\Service\Subscription\SubscriptionManager;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -24,7 +28,10 @@ final class DriverRegistrationAction
         private readonly DriverRegistrationService $driverRegistrations,
         private readonly SubscriptionManager $subscriptions,
         private readonly JwtAuthService $jwt,
-        private readonly UserAccountAssetUrlResolver $assetUrlResolver
+        private readonly UserAccountAssetUrlResolver $assetUrlResolver,
+        private readonly ProviderProfileService $providerProfiles,
+        private readonly LoggerInterface $logger,
+        private readonly Connection $db
     ) {
     }
 
@@ -46,33 +53,70 @@ final class DriverRegistrationAction
         }
 
         try {
-            $user = $this->users->upsertUserAccount(
-                $input->phone,
-                $input->fullName,
-                true,
-                null,
-                $this->mapAccountType($input->signupAs),
-                $input->identityDocumentPath,
-                $input->driverLicense['photoPath'],
-                $input->email,
-                $input->identityDocumentNumber
-            );
+            [$user, $application, $tokenVersion] = $this->db->transactional(
+                function () use ($input, $request): array {
+                    $user = $this->users->upsertUserAccount(
+                        $input->phone,
+                        $input->fullName,
+                        true,
+                        null,
+                        'provider',
+                        $input->identityDocumentPath,
+                        $input->driverLicense['photoPath'],
+                        $input->email,
+                        $input->identityDocumentNumber
+                    );
 
-            $this->subscriptions->initializeFreeSubscription((int) $user['id']);
-            $application = $this->driverRegistrations->register((int) $user['id'], $input, $request->getClientIp());
-            $tokenVersion = $this->users->rotateTokenVersion((int) $user['id']);
+                    $this->providerProfiles->submitActivities(
+                        (int) $user['id'],
+                        in_array($input->signupAs, ['LIVREUR', 'BOTH'], true),
+                        in_array($input->signupAs, ['TRANSPORTEUR', 'BOTH'], true)
+                    );
+                    $this->subscriptions->initializeFreeSubscription((int) $user['id']);
+                    $application = $this->driverRegistrations->register(
+                        (int) $user['id'],
+                        $input,
+                        $request->getClientIp()
+                    );
+                    $tokenVersion = $this->users->rotateTokenVersion((int) $user['id']);
+
+                    return [$user, $application, $tokenVersion];
+                }
+            );
             $token = $this->jwt->issueToken([
                 'sub' => $input->phone,
                 'typ' => 'mobile',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
             ]);
-        } catch (\Throwable) {
+        } catch (UniqueConstraintViolationException $exception) {
+            $this->logger->warning('Driver registration uniqueness conflict', [
+                'phone' => $input->phone,
+                'signupAs' => $input->signupAs,
+                'exception' => $exception,
+            ]);
+
+            return new JsonResponse([
+                'message' => $this->uniqueConflictMessage($exception),
+            ], 409);
+        } catch (\Throwable $exception) {
+            $this->logger->error('Driver registration failed', [
+                'phone' => $input->phone,
+                'signupAs' => $input->signupAs,
+                'exception' => $exception,
+            ]);
+
             return new JsonResponse(['message' => 'Erreur lors de la soumission de l’inscription livreur'], 500);
         }
 
         return new JsonResponse([
             'token' => $token,
+            'refreshToken' => $this->jwt->issueToken([
+                'sub' => $input->phone,
+                'typ' => 'mobile_refresh',
+                'uid' => $user['id'],
+                'tv' => $tokenVersion,
+            ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
             'application' => $application,
         ], 201);
@@ -103,22 +147,28 @@ final class DriverRegistrationAction
         if ($normalizedPhone === '') {
             throw new \InvalidArgumentException('phone est invalide');
         }
+        $this->assertMaxLength($normalizedPhone, 20, 'phone');
 
-        $signupAs = $this->requireString($profile, 'signupAs');
+        $signupAs = strtoupper($this->requireString($profile, 'signupAs'));
         if (!in_array($signupAs, self::ALLOWED_SIGNUP_AS, true)) {
             throw new \InvalidArgumentException('signupAs est invalide');
         }
 
         $fullName = $this->requireString($profile, 'fullName');
+        $this->assertMaxLength($fullName, 100, 'profile.fullName');
         $email = $this->requireString($profile, 'email');
+        $email = strtolower($email);
+        $this->assertMaxLength($email, 180, 'profile.email');
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             throw new \InvalidArgumentException('email est invalide');
         }
 
         $identityDocumentNumber = $this->requireString($profile, 'identityDocumentNumber');
         $identityDocumentPath = $this->requireString($profile, 'identityDocumentPath');
+        $this->assertMaxLength($identityDocumentNumber, 100, 'profile.identityDocumentNumber');
+        $this->assertMaxLength($identityDocumentPath, 255, 'profile.identityDocumentPath');
 
-        $vehicleType = $this->requireString($vehicle, 'type');
+        $vehicleType = strtoupper($this->requireString($vehicle, 'type'));
         if (!in_array($vehicleType, self::ALLOWED_VEHICLE_TYPES, true)) {
             throw new \InvalidArgumentException('vehicle.type est invalide');
         }
@@ -134,20 +184,32 @@ final class DriverRegistrationAction
                 throw new \InvalidArgumentException('vehicle.deliveryZones contient une valeur invalide');
             }
 
-            $normalizedZones[] = trim($zone);
+            $normalizedZone = trim($zone);
+            $this->assertMaxLength($normalizedZone, 100, 'vehicle.deliveryZones');
+            $normalizedZones[] = $normalizedZone;
         }
 
         $requiresMotorizedDocuments = $vehicleType !== 'A_PIED';
-        $brand = $this->optionalString($vehicle, 'brand');
-        $model = $this->optionalString($vehicle, 'model');
+        $brand = $this->optionalSelectorString($vehicle, 'brand');
+        $model = $this->optionalSelectorString($vehicle, 'model');
         $licensePlate = $this->optionalString($vehicle, 'licensePlate');
+        if ($brand !== null) {
+            $this->assertMaxLength($brand, 100, 'vehicle.brand');
+        }
+        if ($model !== null) {
+            $this->assertMaxLength($model, 100, 'vehicle.model');
+        }
+        if ($licensePlate !== null) {
+            $licensePlate = strtoupper($licensePlate);
+            $this->assertMaxLength($licensePlate, 50, 'vehicle.licensePlate');
+        }
 
         if ($requiresMotorizedDocuments && ($brand === null || $model === null || $licensePlate === null)) {
             throw new \InvalidArgumentException('vehicle.brand, vehicle.model et vehicle.licensePlate sont requis');
         }
 
         $driverLicenseNumber = $this->optionalString($driverLicense, 'number');
-        $driverLicenseCategory = $this->optionalString($driverLicense, 'category');
+        $driverLicenseCategory = $this->optionalSelectorString($driverLicense, 'category');
         $driverLicenseExpiryDate = $this->optionalString($driverLicense, 'expiryDate');
         $driverLicensePhotoPath = $this->optionalString($driverLicense, 'photoPath');
 
@@ -157,6 +219,17 @@ final class DriverRegistrationAction
             }
 
             $driverLicenseExpiryDate = $this->normalizeDate($driverLicenseExpiryDate);
+            $this->assertMaxLength($driverLicenseNumber, 100, 'driverLicense.number');
+            $this->assertMaxLength($driverLicenseCategory, 20, 'driverLicense.category');
+            $this->assertMaxLength($driverLicensePhotoPath, 255, 'driverLicense.photoPath');
+        } else {
+            $brand = null;
+            $model = null;
+            $licensePlate = null;
+            $driverLicenseNumber = null;
+            $driverLicenseCategory = null;
+            $driverLicenseExpiryDate = null;
+            $driverLicensePhotoPath = null;
         }
 
         $insurancePath = $this->optionalString($vehicleDocuments, 'insurancePath');
@@ -172,6 +245,23 @@ final class DriverRegistrationAction
             if (!is_array($vehiclePhotoPaths) || $vehiclePhotoPaths === []) {
                 throw new \InvalidArgumentException('vehiclePhotoPaths est requis pour ce type de véhicule');
             }
+        } else {
+            $insurancePath = null;
+            $registrationPath = null;
+            $registrationFrontPath = null;
+            $registrationBackPath = null;
+            $vehiclePhotoPaths = [];
+        }
+
+        foreach ([
+            'vehicleDocuments.insurancePath' => $insurancePath,
+            'vehicleDocuments.registrationPath' => $registrationPath,
+            'vehicleDocuments.registrationFrontPath' => $registrationFrontPath,
+            'vehicleDocuments.registrationBackPath' => $registrationBackPath,
+        ] as $field => $path) {
+            if ($path !== null) {
+                $this->assertMaxLength($path, 255, $field);
+            }
         }
 
         $normalizedVehiclePhotoPaths = [];
@@ -181,7 +271,9 @@ final class DriverRegistrationAction
                     throw new \InvalidArgumentException('vehiclePhotoPaths contient une valeur invalide');
                 }
 
-                $normalizedVehiclePhotoPaths[] = trim($filePath);
+                $normalizedPath = trim($filePath);
+                $this->assertMaxLength($normalizedPath, 255, 'vehiclePhotoPaths');
+                $normalizedVehiclePhotoPaths[] = $normalizedPath;
             }
         }
 
@@ -244,6 +336,24 @@ final class DriverRegistrationAction
         return trim($values[$key]);
     }
 
+    /**
+     * Android selector values may include presentation spacing and a trailing dropdown glyph.
+     *
+     * @param array<string, mixed> $values
+     */
+    private function optionalSelectorString(array $values, string $key): ?string
+    {
+        $value = $this->optionalString($values, $key);
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = preg_replace('/\s*[⌄▼▾]\s*$/u', '', $value) ?? $value;
+        $normalized = trim(preg_replace('/\s+/u', ' ', $normalized) ?? $normalized);
+
+        return $normalized === '' ? null : $normalized;
+    }
+
     private function normalizeDate(string $value): string
     {
         $date = \DateTimeImmutable::createFromFormat('Y-m-d', $value)
@@ -256,13 +366,33 @@ final class DriverRegistrationAction
         return $date->format('Y-m-d');
     }
 
-    private function mapAccountType(string $signupAs): string
+    private function assertMaxLength(string $value, int $maxLength, string $field): void
     {
-        return match ($signupAs) {
-            'LIVREUR' => 'driver',
-            'TRANSPORTEUR' => 'transporter',
-            'BOTH' => 'driver_transport',
-            default => 'client',
+        if (mb_strlen($value) > $maxLength) {
+            throw new \InvalidArgumentException(sprintf(
+                '%s ne doit pas dépasser %d caractères',
+                $field,
+                $maxLength
+            ));
+        }
+    }
+
+    private function uniqueConflictMessage(UniqueConstraintViolationException $exception): string
+    {
+        $message = $exception->getMessage();
+
+        return match (true) {
+            str_contains($message, 'uniq_user_account_identity_document_number')
+                => 'Ce numéro de pièce d’identité est déjà enregistré',
+            str_contains($message, 'uniq_driver_license_number')
+                => 'Ce numéro de permis est déjà enregistré',
+            str_contains($message, 'uniq_driver_vehicle_license_plate')
+                => 'Cette plaque d’immatriculation est déjà enregistrée',
+            str_contains($message, 'user_account_phone_key')
+                => 'Ce numéro de téléphone est déjà enregistré',
+            str_contains($message, 'uniq_user_account_email')
+                => 'Cette adresse email est déjà enregistrée',
+            default => 'Une donnée unique est déjà enregistrée',
         };
     }
 

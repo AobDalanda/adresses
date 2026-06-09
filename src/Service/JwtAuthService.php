@@ -7,6 +7,8 @@ use Symfony\Component\HttpFoundation\Request;
 
 class JwtAuthService
 {
+    public const REFRESH_TOKEN_TTL_SECONDS = 2_592_000;
+
     public function __construct(
         private JWTEncoderInterface $encoder,
         private UserAccountService $users,
@@ -17,11 +19,11 @@ class JwtAuthService
     /**
      * @param array<string, mixed> $payload
      */
-    public function issueToken(array $payload): string
+    public function issueToken(array $payload, ?int $ttlSeconds = null): string
     {
         $now = time();
         $payload['iat'] = $now;
-        $payload['exp'] = $now + $this->tokenTtlSeconds;
+        $payload['exp'] = $now + ($ttlSeconds ?? $this->tokenTtlSeconds);
 
         return $this->encoder->encode($payload);
     }
@@ -59,7 +61,7 @@ class JwtAuthService
             return null;
         }
 
-        if (($payload['typ'] ?? null) === 'mobile') {
+        if (in_array($payload['typ'] ?? null, ['mobile', 'mobile_refresh'], true)) {
             if (!isset($payload['uid'], $payload['tv'])) {
                 return null;
             }

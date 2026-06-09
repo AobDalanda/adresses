@@ -36,7 +36,11 @@ class UserAccountService
                     name = COALESCE(EXCLUDED.name, user_account.name),
                     email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
-                    account_type = COALESCE(EXCLUDED.account_type, user_account.account_type),
+                    account_type = CASE
+                        WHEN user_account.account_type IN ('provider', 'admin') AND EXCLUDED.account_type = 'client'
+                            THEN user_account.account_type
+                        ELSE COALESCE(EXCLUDED.account_type, user_account.account_type)
+                    END,
                     identity_document_path = COALESCE(EXCLUDED.identity_document_path, user_account.identity_document_path),
                     identity_document_number = COALESCE(EXCLUDED.identity_document_number, user_account.identity_document_number),
                     driver_license_path = COALESCE(EXCLUDED.driver_license_path, user_account.driver_license_path)
@@ -87,7 +91,11 @@ class UserAccountService
                     name = COALESCE(EXCLUDED.name, user_account.name),
                     email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
-                    account_type = COALESCE(EXCLUDED.account_type, user_account.account_type),
+                    account_type = CASE
+                        WHEN user_account.account_type IN ('provider', 'admin') AND EXCLUDED.account_type = 'client'
+                            THEN user_account.account_type
+                        ELSE COALESCE(EXCLUDED.account_type, user_account.account_type)
+                    END,
                     identity_document_path = COALESCE(EXCLUDED.identity_document_path, user_account.identity_document_path),
                     identity_document_number = COALESCE(EXCLUDED.identity_document_number, user_account.identity_document_number),
                     driver_license_path = COALESCE(EXCLUDED.driver_license_path, user_account.driver_license_path)
