@@ -9,7 +9,7 @@ use App\Repository\SubscriptionPlanRepository;
 use App\Service\UserAddressService;
 use Doctrine\DBAL\Connection;
 
-final class PlanLimitChecker
+class PlanLimitChecker
 {
     public function __construct(
         private readonly SubscriptionManager $subscriptions,

@@ -18,12 +18,20 @@ final class FcmPushClient
 
     public function sendOtp(string $fcmToken, string $otp): void
     {
+        $this->send($fcmToken, 'Code OTP', sprintf('Votre code OTP est: %s', $otp), [
+            'type' => 'otp',
+            'otp' => $otp,
+        ]);
+    }
+
+    /**
+     * @param array<string, string> $data
+     */
+    public function send(string $fcmToken, string $title, string $body, array $data = []): void
+    {
         $message = CloudMessage::withTarget('token', $fcmToken)
-            ->withNotification(Notification::create('Code OTP', sprintf('Votre code OTP est: %s', $otp)))
-            ->withData([
-                'type' => 'otp',
-                'otp' => $otp,
-            ]);
+            ->withNotification(Notification::create($title, $body))
+            ->withData($data);
 
         try {
             $this->getMessaging()->send($message);

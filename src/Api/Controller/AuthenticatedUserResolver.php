@@ -3,25 +3,18 @@
 namespace App\Api\Controller;
 
 use App\Entity\UserAccount;
-use App\Service\JwtAuthService;
-use App\Service\Subscription\SubscriptionManager;
+use App\Security\RequestIdentityResolver;
 use Symfony\Component\HttpFoundation\Request;
 
 final class AuthenticatedUserResolver
 {
     public function __construct(
-        private readonly JwtAuthService $jwt,
-        private readonly SubscriptionManager $subscriptions
+        private readonly RequestIdentityResolver $identities
     ) {
     }
 
     public function requireMobileUser(Request $request): ?UserAccount
     {
-        $auth = $this->jwt->decodeFromRequest($request);
-        if (!$auth || ($auth['typ'] ?? null) !== 'mobile' || !isset($auth['uid'])) {
-            return null;
-        }
-
-        return $this->subscriptions->getUser((int) $auth['uid']);
+        return $this->identities->resolveMobile($request)?->user;
     }
 }

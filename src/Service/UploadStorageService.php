@@ -6,7 +6,7 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 final class UploadStorageService
 {
-    private const MAX_FILE_SIZE_BYTES = 10_485_760; // 10 MB
+    private const MAX_FILE_SIZE_BYTES = UploadedFileSecurityValidator::MAX_FILE_SIZE_BYTES;
 
     private const CATEGORY_TO_DIRECTORY = [
         'identity_document' => 'identity-documents',
@@ -32,7 +32,8 @@ final class UploadStorageService
 
     public function __construct(
         private readonly AccountDocumentStorage $accountDocuments,
-        private readonly ProfilePhotoStorage $profilePhotos
+        private readonly ProfilePhotoStorage $profilePhotos,
+        private readonly UploadedFileSecurityValidator $validator,
     ) {
     }
 
@@ -40,8 +41,10 @@ final class UploadStorageService
      * @return array{
      *     category: string,
      *     path: string,
-     *     mimeType: ?string,
-     *     size: int
+     *     mimeType: string,
+     *     extension: string,
+     *     size: int,
+     *     checksumSha256: string
      * }
      */
     public function store(string $category, UploadedFile $file): array
@@ -60,14 +63,22 @@ final class UploadStorageService
             throw new \InvalidArgumentException('file dépasse la taille maximale autorisée');
         }
 
-        $extension = strtolower($file->getClientOriginalExtension());
-        if ($extension === '') {
-            throw new \InvalidArgumentException('extension de fichier non reconnue');
+        try {
+            $validated = in_array($category, ['vehicle_photo', 'profile_photo'], true)
+                ? $this->validator->validatePhoto($file)
+                : $this->validator->validateDocument($file);
+        } catch (\RuntimeException $exception) {
+            throw new \InvalidArgumentException($exception->getMessage(), 0, $exception);
         }
 
         $allowedExtensions = self::CATEGORY_ALLOWED_EXTENSIONS[$category];
-        if (!in_array($extension, $allowedExtensions, true)) {
+        if (!in_array($validated['extension'], $allowedExtensions, true)) {
             throw new \InvalidArgumentException('type de fichier non autorisé pour cette catégorie');
+        }
+
+        $checksum = hash_file('sha256', $file->getPathname());
+        if (!is_string($checksum)) {
+            throw new \RuntimeException('Impossible de calculer l intégrité du fichier');
         }
 
         if ($category === 'identity_document') {
@@ -83,9 +94,16 @@ final class UploadStorageService
         return [
             'category' => $category,
             'path' => $path,
-            'mimeType' => $file->getClientMimeType(),
+            'mimeType' => $validated['mimeType'],
+            'extension' => $validated['extension'],
             'size' => $size,
+            'checksumSha256' => $checksum,
         ];
+    }
+
+    public function deleteIfStored(?string $path): void
+    {
+        $this->accountDocuments->deleteIfStored($path);
     }
 
     /**

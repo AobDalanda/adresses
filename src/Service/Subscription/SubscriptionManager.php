@@ -16,7 +16,7 @@ use App\Repository\UserAccountRepository;
 use App\Repository\UserSubscriptionRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
-final class SubscriptionManager
+class SubscriptionManager
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

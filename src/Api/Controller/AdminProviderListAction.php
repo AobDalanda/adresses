@@ -4,22 +4,23 @@ declare(strict_types=1);
 
 namespace App\Api\Controller;
 
-use App\Service\JwtAuthService;
+use App\Security\ProviderAdministrationVoter;
 use App\Service\ProviderProfileService;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 final class AdminProviderListAction
 {
     public function __construct(
-        private readonly JwtAuthService $jwt,
+        private readonly Security $security,
         private readonly ProviderProfileService $providers
     ) {
     }
 
     public function __invoke(Request $request): JsonResponse
     {
-        if (!$this->isAdmin($request)) {
+        if (!$this->security->isGranted(ProviderAdministrationVoter::LIST)) {
             return new JsonResponse(['message' => 'Forbidden'], 403);
         }
 
@@ -41,14 +42,6 @@ final class AdminProviderListAction
             'providers' => $providers,
             'count' => count($providers),
         ]);
-    }
-
-    private function isAdmin(Request $request): bool
-    {
-        $claims = $this->jwt->decodeFromRequest($request);
-        $roles = is_array($claims) ? ($claims['roles'] ?? []) : [];
-
-        return is_array($roles) && in_array('ROLE_ADMIN', $roles, true);
     }
 
     private function optionalBoolean(Request $request, string $name): ?bool

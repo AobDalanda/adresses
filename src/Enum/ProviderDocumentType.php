@@ -1,0 +1,16 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Enum;
+
+enum ProviderDocumentType: string
+{
+    case IDENTITY_FRONT = 'IDENTITY_FRONT';
+    case IDENTITY_BACK = 'IDENTITY_BACK';
+    case DRIVER_LICENSE_FRONT = 'DRIVER_LICENSE_FRONT';
+    case DRIVER_LICENSE_BACK = 'DRIVER_LICENSE_BACK';
+    case VEHICLE_INSURANCE = 'VEHICLE_INSURANCE';
+    case VEHICLE_REGISTRATION = 'VEHICLE_REGISTRATION';
+    case VEHICLE_PHOTO = 'VEHICLE_PHOTO';
+}

@@ -8,7 +8,7 @@ use App\Entity\UserSubscription;
 use App\Repository\UsageCounterRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
-final class UsageCounterManager
+class UsageCounterManager
 {
     public function __construct(
         private readonly UsageCounterRepository $usageCounters,

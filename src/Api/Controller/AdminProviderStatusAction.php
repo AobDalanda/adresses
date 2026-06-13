@@ -4,22 +4,26 @@ declare(strict_types=1);
 
 namespace App\Api\Controller;
 
-use App\Service\JwtAuthService;
+use App\Security\ProviderAdministrationVoter;
 use App\Service\ProviderProfileService;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 final class AdminProviderStatusAction
 {
     public function __construct(
-        private readonly JwtAuthService $jwt,
+        private readonly Security $security,
         private readonly ProviderProfileService $providers
     ) {
     }
 
     public function __invoke(int $id, Request $request): JsonResponse
     {
-        if (!$this->isAdmin($request)) {
+        if (
+            !$this->security->isGranted(ProviderAdministrationVoter::DECIDE)
+            && !$this->security->isGranted(ProviderAdministrationVoter::SUSPEND)
+        ) {
             return new JsonResponse(['message' => 'Forbidden'], 403);
         }
 
@@ -29,8 +33,16 @@ final class AdminProviderStatusAction
             return new JsonResponse(['message' => 'validationStatus est requis'], 400);
         }
 
+        $normalizedStatus = strtolower(trim($status));
+        $requiredPermission = $normalizedStatus === 'suspended'
+            ? ProviderAdministrationVoter::SUSPEND
+            : ProviderAdministrationVoter::DECIDE;
+        if (!$this->security->isGranted($requiredPermission)) {
+            return new JsonResponse(['message' => 'Forbidden'], 403);
+        }
+
         try {
-            $profile = $this->providers->updateStatus($id, strtolower(trim($status)));
+            $profile = $this->providers->updateStatus($id, $normalizedStatus);
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['message' => $exception->getMessage()], 400);
         }
@@ -40,13 +52,5 @@ final class AdminProviderStatusAction
         }
 
         return new JsonResponse(['providerProfile' => $profile]);
-    }
-
-    private function isAdmin(Request $request): bool
-    {
-        $claims = $this->jwt->decodeFromRequest($request);
-        $roles = is_array($claims) ? ($claims['roles'] ?? []) : [];
-
-        return is_array($roles) && in_array('ROLE_ADMIN', $roles, true);
     }
 }

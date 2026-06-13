@@ -16,15 +16,15 @@ final class UserAccountRegisterVerifyActionTest extends TestCase
     public function testVerifyTransfersPendingEmailToUserAccount(): void
     {
         $otpService = $this->createMock(OtpService::class);
-        $otpService->method('verifyOtp')->with('+224620000000', '123456')->willReturn(true);
+        $otpService->method('verifyOtp')->with('620000000', '123456')->willReturn(true);
 
         $userAccountService = $this->createMock(UserAccountService::class);
         $userAccountService
             ->method('findPendingRegistration')
-            ->with('+224620000000')
+            ->with('620000000')
             ->willReturn([
                 'id' => 10,
-                'phone' => '+224620000000',
+                'phone' => '620000000',
                 'fullName' => 'Jane Doe',
                 'email' => 'jane@example.com',
                 'accountType' => 'client',
@@ -37,7 +37,7 @@ final class UserAccountRegisterVerifyActionTest extends TestCase
             ->expects(self::once())
             ->method('upsertUserAccount')
             ->with(
-                '+224620000000',
+                '620000000',
                 'Jane Doe',
                 true,
                 null,
@@ -49,7 +49,7 @@ final class UserAccountRegisterVerifyActionTest extends TestCase
             )
             ->willReturn([
                 'id' => 42,
-                'phone' => '+224620000000',
+                'phone' => '620000000',
                 'name' => 'Jane Doe',
                 'email' => 'jane@example.com',
                 'verified' => true,

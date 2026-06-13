@@ -12,6 +12,7 @@ use App\Service\JwtAuthService;
 use App\Service\Subscription\SubscriptionManager;
 use App\Service\UserAddressService;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\Request;
 
 final class UserAddressDeleteActionTest extends TestCase
@@ -41,9 +42,9 @@ final class UserAddressDeleteActionTest extends TestCase
         $userAddresses->expects(self::never())->method('isDefaultAddress');
         $userAddresses->expects(self::never())->method('deleteUserAddress');
 
-        $controller = new UserAddressDeleteAction($jwt, $subscriptions, $userAddresses);
+        $controller = new UserAddressDeleteAction($jwt, $subscriptions, $userAddresses, new NullLogger());
 
-        $response = $controller->__invoke(12, new Request());
+        $response = $controller->__invoke(new Request(), 12);
 
         self::assertSame(403, $response->getStatusCode());
         self::assertStringContainsString('SUBSCRIPTION_PLAN_REQUIRED', (string) $response->getContent());
@@ -74,9 +75,9 @@ final class UserAddressDeleteActionTest extends TestCase
         $userAddresses->expects(self::once())->method('isDefaultAddress')->with(7, 12)->willReturn(true);
         $userAddresses->expects(self::never())->method('deleteUserAddress');
 
-        $controller = new UserAddressDeleteAction($jwt, $subscriptions, $userAddresses);
+        $controller = new UserAddressDeleteAction($jwt, $subscriptions, $userAddresses, new NullLogger());
 
-        $response = $controller->__invoke(12, new Request());
+        $response = $controller->__invoke(new Request(), 12);
 
         self::assertSame(409, $response->getStatusCode());
         self::assertStringContainsString('DEFAULT_ADDRESS_DELETE_FORBIDDEN', (string) $response->getContent());

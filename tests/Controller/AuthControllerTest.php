@@ -8,6 +8,7 @@ use App\Service\OtpService;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\HttpFoundation\Request;
 
 final class AuthControllerTest extends TestCase
@@ -21,7 +22,7 @@ final class AuthControllerTest extends TestCase
         $userAccountService
             ->expects(self::once())
             ->method('verifiedUserExists')
-            ->with('+224620000000')
+            ->with('620000000')
             ->willReturn(false);
 
         $controller = new AuthController(
@@ -30,6 +31,7 @@ final class AuthControllerTest extends TestCase
             $this->createMock(JwtAuthService::class),
             $this->createMock(UserAccountAssetUrlResolver::class)
         );
+        $controller->setContainer(new Container());
 
         $response = $controller->requestOtp(new Request(content: json_encode([
             'phone' => '620000000',

@@ -7,8 +7,11 @@ use Doctrine\DBAL\Connection;
 
 final class DriverRegistrationService
 {
-    public function __construct(private Connection $db)
-    {
+    public function __construct(
+        private Connection $db,
+        private readonly ProviderCanonicalRegistrationWriter $canonicalWriter,
+        private readonly bool $canonicalWriteEnabled,
+    ) {
     }
 
     /**
@@ -16,9 +19,7 @@ final class DriverRegistrationService
      */
     public function register(int $userId, DriverRegistrationInput $input, ?string $clientIp = null): array
     {
-        $this->db->beginTransaction();
-
-        try {
+        return $this->db->transactional(function () use ($userId, $input, $clientIp): array {
             $applicationId = (int) $this->db->fetchOne(
                 '
                 INSERT INTO driver_application (
@@ -168,15 +169,14 @@ final class DriverRegistrationService
                 ]
             );
 
-            $this->db->commit();
+            if ($this->canonicalWriteEnabled) {
+                $this->canonicalWriter->write($userId, $applicationId, $input);
+            }
 
             return [
                 'applicationId' => $applicationId,
                 'status' => 'PENDING',
             ];
-        } catch (\Throwable $e) {
-            $this->db->rollBack();
-            throw $e;
-        }
+        });
     }
 }

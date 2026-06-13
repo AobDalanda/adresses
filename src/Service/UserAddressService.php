@@ -4,7 +4,7 @@ namespace App\Service;
 
 use Doctrine\DBAL\Connection;
 
-final class UserAddressService
+class UserAddressService
 {
     public function __construct(private Connection $db)
     {

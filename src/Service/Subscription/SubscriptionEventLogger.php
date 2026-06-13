@@ -8,7 +8,7 @@ use App\Entity\UserSubscription;
 use App\Enum\SubscriptionEventType;
 use Doctrine\ORM\EntityManagerInterface;
 
-final class SubscriptionEventLogger
+class SubscriptionEventLogger
 {
     public function __construct(private EntityManagerInterface $entityManager)
     {

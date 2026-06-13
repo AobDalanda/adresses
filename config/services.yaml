@@ -30,6 +30,12 @@ parameters:
     orange_money_webhook_secret: '%env(default::ORANGE_MONEY_WEBHOOK_SECRET)%'
     mtn_money_webhook_secret: '%env(default::MTN_MONEY_WEBHOOK_SECRET)%'
     stripe_webhook_secret: '%env(default::STRIPE_WEBHOOK_SECRET)%'
+    provider_workflow_write: '%env(bool:PROVIDER_WORKFLOW_WRITE)%'
+    provider_workflow_read: '%env(bool:PROVIDER_WORKFLOW_READ)%'
+    provider_v2_rollout_percent: '%env(int:PROVIDER_V2_ROLLOUT_PERCENT)%'
+    provider_v2_rollout_salt: '%env(string:PROVIDER_V2_ROLLOUT_SALT)%'
+    provider_v1_sunset: '%env(default::PROVIDER_V1_SUNSET)%'
+    provider_upload_session_ttl_seconds: '%env(int:PROVIDER_UPLOAD_SESSION_TTL_SECONDS)%'
 
 services:
     # default configuration for services in *this* file
@@ -51,6 +57,21 @@ services:
     App\Service\JwtAuthService:
         arguments:
             $tokenTtlSeconds: '%jwt_ttl%'
+
+    App\Service\DriverRegistrationService:
+        arguments:
+            $canonicalWriteEnabled: '%provider_workflow_write%'
+
+    App\Service\ProviderApiRolloutPolicy:
+        arguments:
+            $canonicalReadEnabled: '%provider_workflow_read%'
+            $rolloutPercent: '%provider_v2_rollout_percent%'
+            $rolloutSalt: '%provider_v2_rollout_salt%'
+            $sunset: '%provider_v1_sunset%'
+
+    App\Service\ProviderUploadSessionService:
+        arguments:
+            $ttlSeconds: '%provider_upload_session_ttl_seconds%'
 
     App\Repository\DriverLocationRepositoryInterface:
         alias: App\Repository\DriverLocationRepository

@@ -15,13 +15,13 @@ final class UserAccountRegisterActionTest extends TestCase
     public function testRegisterPersistsPendingEmail(): void
     {
         $userAccountService = $this->createMock(UserAccountService::class);
-        $userAccountService->method('userExists')->with('+224620000000')->willReturn(false);
-        $userAccountService->method('findPendingRegistration')->with('+224620000000')->willReturn(null);
+        $userAccountService->method('userExists')->with('620000000')->willReturn(false);
+        $userAccountService->method('findPendingRegistration')->with('620000000')->willReturn(null);
         $userAccountService
             ->expects(self::once())
             ->method('createPendingRegistration')
             ->with(
-                '+224620000000',
+                '620000000',
                 'Jane Doe',
                 null,
                 'client',
@@ -32,7 +32,7 @@ final class UserAccountRegisterActionTest extends TestCase
             );
 
         $otpService = $this->createMock(OtpService::class);
-        $otpService->expects(self::once())->method('requestOtp')->with('+224620000000');
+        $otpService->expects(self::once())->method('requestOtp')->with('620000000');
 
         $controller = new UserAccountRegisterAction(
             $userAccountService,
@@ -50,6 +50,9 @@ final class UserAccountRegisterActionTest extends TestCase
         ], JSON_THROW_ON_ERROR)));
 
         self::assertSame(202, $response->getStatusCode());
-        self::assertSame('{"message":"OTP envoyé"}', $response->getContent());
+        self::assertSame(
+            ['message' => 'OTP envoyé'],
+            json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR)
+        );
     }
 }
