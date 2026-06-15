@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
 use App\Service\ProviderProfileService;
+use App\Service\Subscription\SubscriptionManager;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use App\Util\PhoneNumberNormalizer;
@@ -21,6 +22,7 @@ class AuthController extends AbstractController
         private UserAccountService $userAccountService,
         private JwtAuthService $jwt,
         private UserAccountAssetUrlResolver $assetUrlResolver,
+        private SubscriptionManager $subscriptions,
         private ?ProviderProfileService $providerProfiles = null
     ) {
     }
@@ -107,6 +109,8 @@ class AuthController extends AbstractController
         if ($registration) {
             $this->userAccountService->markPendingRegistrationVerified($registration['id']);
         }
+
+        $this->subscriptions->initializeFreeSubscription((int) $user['id']);
 
         $tokenVersion = $this->userAccountService->rotateTokenVersion((int) $user['id']);
         $token = $this->jwt->issueToken([

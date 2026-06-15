@@ -9,6 +9,7 @@ use App\Service\Subscription\SubscriptionManager;
 use App\Service\Subscription\UsageCounterManager;
 use App\Service\UserAddressService;
 use App\Util\PhoneNumberNormalizer;
+use App\Exception\NoActiveSubscriptionException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -82,6 +83,12 @@ final class UserAddressCreateAction
 
         $userId = (int) $auth['uid'];
         $user = $this->subscriptions->getUser($userId);
+
+        try {
+            $this->subscriptions->getActiveSubscription($user);
+        } catch (NoActiveSubscriptionException) {
+            $this->subscriptions->initializeFreeSubscription($userId);
+        }
 
         try {
             $this->planLimits->assertCanCreateAddress($user);
