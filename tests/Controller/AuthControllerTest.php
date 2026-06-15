@@ -5,6 +5,7 @@ namespace App\Tests\Controller;
 use App\Controller\AuthController;
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
+use App\Service\Subscription\SubscriptionManager;
 use App\Service\UserAccountAssetUrlResolver;
 use App\Service\UserAccountService;
 use PHPUnit\Framework\TestCase;
@@ -29,7 +30,8 @@ final class AuthControllerTest extends TestCase
             $otpService,
             $userAccountService,
             $this->createMock(JwtAuthService::class),
-            $this->createMock(UserAccountAssetUrlResolver::class)
+            $this->createMock(UserAccountAssetUrlResolver::class),
+            $this->createMock(SubscriptionManager::class)
         );
         $controller->setContainer(new Container());
 
