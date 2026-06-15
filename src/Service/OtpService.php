@@ -44,10 +44,26 @@ class OtpService
         try {
             $this->whatsAppOtpClient->sendOtp($phone, $otp);
         } catch (\Throwable $exception) {
+            $this->db->executeStatement(
+                "
+                UPDATE otp_request
+                SET status = 'FAILED'
+                WHERE phone = :phone
+                  AND otp_hash = :hash
+                  AND status = 'PENDING'
+                ",
+                [
+                    'phone' => $phone,
+                    'hash' => $hash,
+                ]
+            );
+
             $this->logger->warning('OTP stored but WhatsApp delivery failed.', [
                 'phone' => $phone,
                 'exception' => $exception,
             ]);
+
+            throw $exception;
         }
     }
 
