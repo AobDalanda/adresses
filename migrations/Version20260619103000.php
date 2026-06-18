@@ -86,8 +86,8 @@ final class Version20260619103000 extends AbstractMigration
                 'Tarif standard de base',
                 0,
                 NULL,
+                5000,
                 1000,
-                0,
                 'GNF',
                 100,
                 TRUE

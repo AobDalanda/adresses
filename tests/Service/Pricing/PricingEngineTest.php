@@ -62,7 +62,7 @@ final class PricingEngineTest extends TestCase
             ->method('fetchAssociative')
             ->willReturnOnConsecutiveCalls(
                 ['id' => 7, 'name' => 'Model 2026'],
-                ['id' => 99, 'base_price' => 1000, 'price_per_km' => 0, 'currency' => 'GNF']
+                ['id' => 99, 'base_price' => 5000, 'price_per_km' => 1000, 'currency' => 'GNF']
             );
         $db->expects(self::once())
             ->method('fetchAllAssociative')
@@ -78,9 +78,9 @@ final class PricingEngineTest extends TestCase
             date: new \DateTimeImmutable('2026-06-18 12:00:00+00:00')
         ));
 
-        self::assertSame(1000, $result->basePrice);
-        self::assertSame(0, $result->distancePrice);
-        self::assertSame(1000, $result->totalPrice);
+        self::assertSame(5000, $result->basePrice);
+        self::assertSame(12300, $result->distancePrice);
+        self::assertSame(17300, $result->totalPrice);
         self::assertSame('GNF', $result->currency);
         self::assertSame(99, $result->pricingRuleId);
     }
