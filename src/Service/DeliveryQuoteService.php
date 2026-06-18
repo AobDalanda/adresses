@@ -55,12 +55,14 @@ class DeliveryQuoteService
         $this->assertAddressHasCoordinates($departure, 'départ');
         $this->assertAddressHasCoordinates($destination, 'destination');
 
-        $distanceKm = $this->calculateRoadDistanceKm(
-            (float) $departure['latitude'],
-            (float) $departure['longitude'],
-            (float) $destination['latitude'],
-            (float) $destination['longitude']
-        );
+        $distanceKm = $this->isSameAddress($departure, $destination)
+            ? 0.0
+            : $this->calculateRoadDistanceKm(
+                (float) $departure['latitude'],
+                (float) $departure['longitude'],
+                (float) $destination['latitude'],
+                (float) $destination['longitude']
+            );
         $durationMinutes = $this->calculateDurationMinutes($distanceKm);
         $zoneId = $this->resolvePricingZoneId(
             $departure['zone_admin_area_id'] !== null ? (int) $departure['zone_admin_area_id'] : null,
@@ -223,6 +225,16 @@ class DeliveryQuoteService
         $centralAngle = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadiusKm * $centralAngle * self::ROAD_DISTANCE_FACTOR;
+    }
+
+    /**
+     * @param array<string, mixed> $departure
+     * @param array<string, mixed> $destination
+     */
+    private function isSameAddress(array $departure, array $destination): bool
+    {
+        return isset($departure['address_id'], $destination['address_id'])
+            && (int) $departure['address_id'] === (int) $destination['address_id'];
     }
 
     private function calculateDurationMinutes(float $distanceKm): int

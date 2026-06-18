@@ -196,6 +196,49 @@ final class DeliveryQuoteServiceTest extends TestCase
         self::assertSame('USR_34', $quote['recipient']['id']);
     }
 
+    public function testQuoteSetsEstimatedDistanceToZeroWhenDepartureAndDestinationAreSameAddress(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('fetchOne')
+            ->with('SELECT account_type FROM user_account WHERE id = :userId LIMIT 1', ['userId' => 12])
+            ->willReturn('client');
+        $db->expects(self::exactly(2))
+            ->method('fetchAssociative')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'address_id' => 10,
+                    'address_name' => 'Domicile',
+                    'latitude' => 9.6412,
+                    'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
+                    'user_id' => 12,
+                    'user_name' => 'Aissatou Barry',
+                    'user_phone' => '+224620000001',
+                ],
+                [
+                    'address_id' => 10,
+                    'address_name' => 'Domicile',
+                    'latitude' => 9.6412,
+                    'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
+                    'user_id' => 12,
+                    'user_name' => 'Aissatou Barry',
+                    'user_phone' => '+224620000001',
+                ]
+            );
+
+        $quote = $this->service($db)->quote(
+            ['addressName' => 'Domicile', 'userIdentifier' => 'USR_12'],
+            ['addressName' => 'Domicile', 'userIdentifier' => 'USR_12'],
+            requesterUserId: 12
+        );
+
+        self::assertSame(0.0, $quote['distanceKm']);
+    }
+
     public function testQuoteRejectsInvalidUserIdentifier(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -212,14 +255,15 @@ final class DeliveryQuoteServiceTest extends TestCase
         $pricing = $this->createMock(PricingEngine::class);
         $pricing->method('calculate')->willReturnCallback(function (PricingRequest $request) {
             self::assertContains($request->customerType, ['BUSINESS', 'CLIENT', 'PROVIDER']);
+            self::assertGreaterThanOrEqual(0, $request->distanceKm);
 
             return new PricingResult(
-                distance: 7.4,
-                duration: 28,
+                distance: round($request->distanceKm, 1),
+                duration: $request->durationMinutes,
                 basePrice: 15000,
-                distancePrice: 12000,
+                distancePrice: (int) round($request->distanceKm * 1000),
                 surcharges: [],
-                totalPrice: 27000,
+                totalPrice: 15000 + (int) round($request->distanceKm * 1000),
                 currency: 'GNF',
                 pricingModelId: 1,
                 pricingRuleId: 2
