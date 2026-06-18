@@ -54,4 +54,31 @@ final class DeliveryQuoteActionTest extends TestCase
             $response->getContent()
         );
     }
+
+    public function testQuoteAcceptsIntegerUserIdentifierPayload(): void
+    {
+        $jwt = $this->createMock(JwtAuthService::class);
+        $jwt->method('decodeFromRequest')->willReturn(['typ' => 'mobile', 'uid' => 12]);
+
+        $quotes = $this->createMock(DeliveryQuoteService::class);
+        $quotes->expects(self::once())
+            ->method('quote')
+            ->with(
+                ['addressName' => 'Domicile', 'userIdentifier' => 12],
+                'ADR_TOKEN'
+            )
+            ->willReturn([
+                'recipient' => ['id' => 'USR_34', 'firstName' => 'Mamadou', 'lastName' => 'Diallo', 'phone' => '+224620123456'],
+                'distanceKm' => 7.4,
+                'durationMinutes' => 28,
+                'deliveryCost' => 27000,
+                'currency' => 'GNF',
+            ]);
+
+        $response = (new DeliveryQuoteAction($jwt, $quotes))->__invoke(
+            new Request(content: '{"departure":{"addressName":"Domicile","userIdentifier":12},"destination":"ADR_TOKEN"}')
+        );
+
+        self::assertSame(200, $response->getStatusCode());
+    }
 }

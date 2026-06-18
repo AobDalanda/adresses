@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Util\PhoneNumberNormalizer;
 use Doctrine\DBAL\Connection;
 
 class DeliveryQuoteService
@@ -19,8 +20,8 @@ class DeliveryQuoteService
     }
 
     /**
-     * @param array{addressName: string, userIdentifier: string} $departureInput
-     * @param string|array{addressName: string, userIdentifier: string} $destinationInput
+     * @param array{addressName: string, userIdentifier: int|string} $departureInput
+     * @param string|array{addressName: string, userIdentifier: int|string} $destinationInput
      * @return array<string, mixed>
      */
     public function quote(array $departureInput, string|array $destinationInput): array
@@ -137,15 +138,35 @@ class DeliveryQuoteService
         return $row !== false ? $row : null;
     }
 
-    private function decodeUserIdentifier(string $identifier): int
+    private function decodeUserIdentifier(int|string $identifier): int
     {
+        if (is_int($identifier)) {
+            if ($identifier > 0) {
+                return $identifier;
+            }
+
+            throw new \InvalidArgumentException('userIdentifier invalide.');
+        }
+
         $identifier = trim($identifier);
-        if (preg_match('/^USR_(\d+)$/', $identifier, $matches) === 1) {
+        if (preg_match('/^(?:USR|USER)[_:-](\d+)$/i', $identifier, $matches) === 1) {
             return (int) $matches[1];
         }
 
         if (ctype_digit($identifier)) {
             return (int) $identifier;
+        }
+
+        $normalizedPhone = PhoneNumberNormalizer::normalize($identifier);
+        if ($normalizedPhone !== '') {
+            $userId = $this->db->fetchOne(
+                'SELECT id FROM user_account WHERE phone = :phone LIMIT 1',
+                ['phone' => $normalizedPhone]
+            );
+
+            if ($userId !== false) {
+                return (int) $userId;
+            }
         }
 
         throw new \InvalidArgumentException('userIdentifier invalide.');

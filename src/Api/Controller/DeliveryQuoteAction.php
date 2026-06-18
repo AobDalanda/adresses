@@ -42,7 +42,7 @@ final class DeliveryQuoteAction
     }
 
     /**
-     * @return array{addressName: string, userIdentifier: string}
+     * @return array{addressName: string, userIdentifier: int|string}
      */
     private function readAddressReference(mixed $value, string $field): array
     {
@@ -56,18 +56,21 @@ final class DeliveryQuoteAction
             throw new \InvalidArgumentException(sprintf('%s.addressName est requis', $field));
         }
 
-        if (!is_string($userIdentifier) || trim($userIdentifier) === '') {
+        if (
+            (!is_string($userIdentifier) && !is_int($userIdentifier))
+            || (is_string($userIdentifier) && trim($userIdentifier) === '')
+        ) {
             throw new \InvalidArgumentException(sprintf('%s.userIdentifier est requis', $field));
         }
 
         return [
             'addressName' => trim($addressName),
-            'userIdentifier' => trim($userIdentifier),
+            'userIdentifier' => is_string($userIdentifier) ? trim($userIdentifier) : $userIdentifier,
         ];
     }
 
     /**
-     * @return string|array{addressName: string, userIdentifier: string}
+     * @return string|array{addressName: string, userIdentifier: int|string}
      */
     private function readDestination(mixed $value): string|array
     {

@@ -84,6 +84,77 @@ final class DeliveryQuoteServiceTest extends TestCase
         self::assertSame('USR_34', $quote['recipient']['id']);
     }
 
+    public function testQuoteAcceptsIntegerUserIdentifier(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::exactly(2))
+            ->method('fetchAssociative')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'address_id' => 10,
+                    'address_name' => 'Domicile',
+                    'latitude' => 9.6412,
+                    'longitude' => -13.5784,
+                    'user_id' => 12,
+                    'user_name' => 'Aissatou Barry',
+                    'user_phone' => '+224620000001',
+                ],
+                [
+                    'address_id' => 22,
+                    'address_name' => 'Bureau',
+                    'latitude' => 9.6900,
+                    'longitude' => -13.5200,
+                    'user_id' => 34,
+                    'user_name' => 'Mamadou Diallo',
+                    'user_phone' => '+224620123456',
+                ]
+            );
+
+        $quote = (new DeliveryQuoteService($db))->quote(
+            ['addressName' => 'Domicile', 'userIdentifier' => 12],
+            ['addressName' => 'Bureau', 'userIdentifier' => 34]
+        );
+
+        self::assertSame('USR_34', $quote['recipient']['id']);
+    }
+
+    public function testQuoteAcceptsPhoneUserIdentifier(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::exactly(2))
+            ->method('fetchOne')
+            ->willReturnOnConsecutiveCalls(12, 34);
+        $db->expects(self::exactly(2))
+            ->method('fetchAssociative')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'address_id' => 10,
+                    'address_name' => 'Domicile',
+                    'latitude' => 9.6412,
+                    'longitude' => -13.5784,
+                    'user_id' => 12,
+                    'user_name' => 'Aissatou Barry',
+                    'user_phone' => '224620000001',
+                ],
+                [
+                    'address_id' => 22,
+                    'address_name' => 'Bureau',
+                    'latitude' => 9.6900,
+                    'longitude' => -13.5200,
+                    'user_id' => 34,
+                    'user_name' => 'Mamadou Diallo',
+                    'user_phone' => '224620123456',
+                ]
+            );
+
+        $quote = (new DeliveryQuoteService($db))->quote(
+            ['addressName' => 'Domicile', 'userIdentifier' => '+224 620 000 001'],
+            ['addressName' => 'Bureau', 'userIdentifier' => '+224 620 123 456']
+        );
+
+        self::assertSame('USR_34', $quote['recipient']['id']);
+    }
+
     public function testQuoteRejectsInvalidUserIdentifier(): void
     {
         $this->expectException(\InvalidArgumentException::class);
