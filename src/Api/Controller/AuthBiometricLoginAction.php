@@ -1,14 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Api\Controller;
 
 use App\Service\MobileTokenRefreshService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
-final class AuthRefreshTokenAction
+final class AuthBiometricLoginAction
 {
     public function __construct(private readonly MobileTokenRefreshService $tokens)
     {
