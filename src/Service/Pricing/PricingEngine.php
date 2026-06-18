@@ -9,8 +9,6 @@ use Doctrine\DBAL\Connection;
 
 class PricingEngine
 {
-    private const CURRENCY = 'GNF';
-
     public function __construct(private Connection $db)
     {
     }
@@ -36,7 +34,7 @@ class PricingEngine
             distancePrice: $distancePrice,
             surcharges: $surcharges,
             totalPrice: $subtotal + $surchargeTotal,
-            currency: self::CURRENCY,
+            currency: (string) ($rule['currency'] ?? 'GNF'),
             pricingModelId: (int) $model['id'],
             pricingRuleId: (int) $rule['id']
         );
@@ -77,18 +75,21 @@ class PricingEngine
             '
             SELECT rule.*
             FROM pricing_rules rule
-            JOIN service_types service ON service.id = rule.service_type_id
-            JOIN vehicle_types vehicle ON vehicle.id = rule.vehicle_type_id
+            LEFT JOIN service_types service ON service.id = rule.service_type_id
+            LEFT JOIN vehicle_types vehicle ON vehicle.id = rule.vehicle_type_id
+            LEFT JOIN customer_types customer ON customer.id = rule.customer_type_id
             WHERE rule.pricing_model_id = :modelId
               AND rule.is_active = TRUE
-              AND service.is_active = TRUE
-              AND vehicle.is_active = TRUE
-              AND service.code = :serviceType
-              AND vehicle.code = :vehicleType
+              AND (rule.service_type_id IS NULL OR (service.is_active = TRUE AND service.code = :serviceType))
+              AND (rule.vehicle_type_id IS NULL OR (vehicle.is_active = TRUE AND vehicle.code = :vehicleType))
+              AND (rule.customer_type_id IS NULL OR (customer.is_active = TRUE AND customer.code = :customerType))
               AND rule.distance_min <= :distance
               AND (rule.distance_max IS NULL OR rule.distance_max > :distance)
               AND (rule.zone_id = :zoneId OR rule.zone_id IS NULL)
             ORDER BY
+              CASE WHEN rule.service_type_id IS NULL THEN 1 ELSE 0 END,
+              CASE WHEN rule.vehicle_type_id IS NULL THEN 1 ELSE 0 END,
+              CASE WHEN rule.customer_type_id IS NULL THEN 1 ELSE 0 END,
               CASE WHEN rule.zone_id = :zoneId THEN 0 ELSE 1 END,
               rule.priority DESC,
               rule.distance_min DESC,
@@ -99,6 +100,7 @@ class PricingEngine
                 'modelId' => (int) $model['id'],
                 'serviceType' => $this->normalizeCode($request->serviceType),
                 'vehicleType' => $this->normalizeCode($request->vehicleType),
+                'customerType' => $this->normalizeCode($request->customerType),
                 'distance' => $request->distanceKm,
                 'zoneId' => $request->zoneId,
             ]
@@ -161,6 +163,10 @@ class PricingEngine
         }
 
         if (isset($condition['vehicle_type']) && $this->normalizeCode((string) $condition['vehicle_type']) !== $this->normalizeCode($request->vehicleType)) {
+            return false;
+        }
+
+        if (isset($condition['customer_type']) && $this->normalizeCode((string) $condition['customer_type']) !== $this->normalizeCode($request->customerType)) {
             return false;
         }
 
