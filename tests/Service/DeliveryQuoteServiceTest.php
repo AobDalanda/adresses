@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service;
 
 use App\Dto\Pricing\PricingResult;
+use App\Dto\Pricing\PricingRequest;
 use App\Service\DeliveryQuoteService;
 use App\Service\Pricing\PricingEngine;
 use Doctrine\DBAL\Connection;
@@ -15,6 +16,10 @@ final class DeliveryQuoteServiceTest extends TestCase
     public function testQuoteByNamedAddressesCalculatesDeliveryInformation(): void
     {
         $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('fetchOne')
+            ->with('SELECT account_type FROM user_account WHERE id = :userId LIMIT 1', ['userId' => 12])
+            ->willReturn('business');
         $db->expects(self::exactly(2))
             ->method('fetchAssociative')
             ->willReturnOnConsecutiveCalls(
@@ -44,7 +49,8 @@ final class DeliveryQuoteServiceTest extends TestCase
 
         $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => 'USR_12'],
-            ['addressName' => 'Bureau', 'userIdentifier' => 'USR_34']
+            ['addressName' => 'Bureau', 'userIdentifier' => 'USR_34'],
+            requesterUserId: 12
         );
 
         self::assertSame(['id' => 'USR_34', 'firstName' => 'Mamadou', 'lastName' => 'Diallo', 'phone' => '+224620123456'], $quote['recipient']);
@@ -59,6 +65,10 @@ final class DeliveryQuoteServiceTest extends TestCase
     public function testQuoteCanResolveDestinationByQrToken(): void
     {
         $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('fetchOne')
+            ->with('SELECT account_type FROM user_account WHERE id = :userId LIMIT 1', ['userId' => 12])
+            ->willReturn('client');
         $db->expects(self::exactly(2))
             ->method('fetchAssociative')
             ->willReturnOnConsecutiveCalls(
@@ -88,7 +98,8 @@ final class DeliveryQuoteServiceTest extends TestCase
 
         $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => '12'],
-            'ADR_TOKEN'
+            'ADR_TOKEN',
+            requesterUserId: 12
         );
 
         self::assertSame('USR_34', $quote['recipient']['id']);
@@ -97,6 +108,10 @@ final class DeliveryQuoteServiceTest extends TestCase
     public function testQuoteAcceptsIntegerUserIdentifier(): void
     {
         $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('fetchOne')
+            ->with('SELECT account_type FROM user_account WHERE id = :userId LIMIT 1', ['userId' => 12])
+            ->willReturn('client');
         $db->expects(self::exactly(2))
             ->method('fetchAssociative')
             ->willReturnOnConsecutiveCalls(
@@ -126,7 +141,8 @@ final class DeliveryQuoteServiceTest extends TestCase
 
         $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => 12],
-            ['addressName' => 'Bureau', 'userIdentifier' => 34]
+            ['addressName' => 'Bureau', 'userIdentifier' => 34],
+            requesterUserId: 12
         );
 
         self::assertSame('USR_34', $quote['recipient']['id']);
@@ -135,9 +151,15 @@ final class DeliveryQuoteServiceTest extends TestCase
     public function testQuoteAcceptsPhoneUserIdentifier(): void
     {
         $db = $this->createMock(Connection::class);
-        $db->expects(self::exactly(2))
+        $db->expects(self::exactly(3))
             ->method('fetchOne')
-            ->willReturnOnConsecutiveCalls(12, 34);
+            ->willReturnCallback(function (string $query, array $params) {
+                if (str_contains($query, 'SELECT account_type')) {
+                    return 'provider';
+                }
+
+                return $params['phone'] === '224620000001' ? 12 : 34;
+            });
         $db->expects(self::exactly(2))
             ->method('fetchAssociative')
             ->willReturnOnConsecutiveCalls(
@@ -167,7 +189,8 @@ final class DeliveryQuoteServiceTest extends TestCase
 
         $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => '+224 620 000 001'],
-            ['addressName' => 'Bureau', 'userIdentifier' => '+224 620 123 456']
+            ['addressName' => 'Bureau', 'userIdentifier' => '+224 620 123 456'],
+            requesterUserId: 12
         );
 
         self::assertSame('USR_34', $quote['recipient']['id']);
@@ -187,17 +210,21 @@ final class DeliveryQuoteServiceTest extends TestCase
     private function service(Connection $db): DeliveryQuoteService
     {
         $pricing = $this->createMock(PricingEngine::class);
-        $pricing->method('calculate')->willReturn(new PricingResult(
-            distance: 7.4,
-            duration: 28,
-            basePrice: 15000,
-            distancePrice: 12000,
-            surcharges: [],
-            totalPrice: 27000,
-            currency: 'GNF',
-            pricingModelId: 1,
-            pricingRuleId: 2
-        ));
+        $pricing->method('calculate')->willReturnCallback(function (PricingRequest $request) {
+            self::assertContains($request->customerType, ['BUSINESS', 'CLIENT', 'PROVIDER']);
+
+            return new PricingResult(
+                distance: 7.4,
+                duration: 28,
+                basePrice: 15000,
+                distancePrice: 12000,
+                surcharges: [],
+                totalPrice: 27000,
+                currency: 'GNF',
+                pricingModelId: 1,
+                pricingRuleId: 2
+            );
+        });
 
         return new DeliveryQuoteService($db, $pricing);
     }

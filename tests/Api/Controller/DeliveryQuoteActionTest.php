@@ -34,7 +34,10 @@ final class DeliveryQuoteActionTest extends TestCase
             ->method('quote')
             ->with(
                 ['addressName' => 'Domicile', 'userIdentifier' => 'USR_12'],
-                'ADR_TOKEN'
+                'ADR_TOKEN',
+                'STANDARD',
+                'MOTO',
+                12
             )
             ->willReturn([
                 'recipient' => ['id' => 'USR_34', 'firstName' => 'Mamadou', 'lastName' => 'Diallo', 'phone' => '+224620123456'],
@@ -65,7 +68,10 @@ final class DeliveryQuoteActionTest extends TestCase
             ->method('quote')
             ->with(
                 ['addressName' => 'Domicile', 'userIdentifier' => 12],
-                'ADR_TOKEN'
+                'ADR_TOKEN',
+                'STANDARD',
+                'MOTO',
+                12
             )
             ->willReturn([
                 'recipient' => ['id' => 'USR_34', 'firstName' => 'Mamadou', 'lastName' => 'Diallo', 'phone' => '+224620123456'],

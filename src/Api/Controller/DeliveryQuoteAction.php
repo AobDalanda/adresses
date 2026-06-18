@@ -33,7 +33,13 @@ final class DeliveryQuoteAction
             $serviceType = $this->readOptionalCode($payload['serviceType'] ?? null, 'STANDARD', 'serviceType');
             $vehicleType = $this->readOptionalCode($payload['vehicleType'] ?? null, 'MOTO', 'vehicleType');
 
-            return new JsonResponse($this->quotes->quote($departure, $destination, $serviceType, $vehicleType));
+            return new JsonResponse($this->quotes->quote(
+                $departure,
+                $destination,
+                $serviceType,
+                $vehicleType,
+                (int) $auth['uid']
+            ));
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 400);
         } catch (\RuntimeException $e) {

@@ -29,6 +29,7 @@ class DeliveryQuoteService
         string|array $destinationInput,
         string $serviceType = 'STANDARD',
         string $vehicleType = 'MOTO',
+        ?int $requesterUserId = null,
         ?\DateTimeImmutable $date = null
     ): array
     {
@@ -65,11 +66,13 @@ class DeliveryQuoteService
             $departure['zone_admin_area_id'] !== null ? (int) $departure['zone_admin_area_id'] : null,
             $departure['zone_name'] !== null ? (string) $departure['zone_name'] : null
         );
+        $customerType = $this->resolveCustomerType($requesterUserId);
         $pricing = $this->pricing->calculate(new PricingRequest(
             distanceKm: $distanceKm,
             durationMinutes: $durationMinutes,
             serviceType: $serviceType,
             vehicleType: $vehicleType,
+            customerType: $customerType,
             zoneId: $zoneId,
             date: $date ?? new \DateTimeImmutable()
         ));
@@ -252,6 +255,24 @@ class DeliveryQuoteService
         }
 
         return null;
+    }
+
+    private function resolveCustomerType(?int $requesterUserId): string
+    {
+        if ($requesterUserId === null || $requesterUserId <= 0) {
+            return 'CLIENT';
+        }
+
+        $accountType = $this->db->fetchOne(
+            'SELECT account_type FROM user_account WHERE id = :userId LIMIT 1',
+            ['userId' => $requesterUserId]
+        );
+
+        if (!is_string($accountType) || trim($accountType) === '') {
+            return 'CLIENT';
+        }
+
+        return $this->normalizeCode($accountType);
     }
 
     /**

@@ -9,6 +9,7 @@ final readonly class PricingRequest
         public int $durationMinutes,
         public string $serviceType,
         public string $vehicleType,
+        public string $customerType,
         public ?int $zoneId,
         public \DateTimeImmutable $date
     ) {
