@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Dto\Pricing\PricingResult;
 use App\Service\DeliveryQuoteService;
+use App\Service\Pricing\PricingEngine;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 
@@ -21,6 +23,8 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Domicile',
                     'latitude' => 9.6412,
                     'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 12,
                     'user_name' => 'Aissatou Barry',
                     'user_phone' => '+224620000001',
@@ -30,13 +34,15 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Bureau',
                     'latitude' => 9.6900,
                     'longitude' => -13.5200,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 34,
                     'user_name' => 'Mamadou Diallo',
                     'user_phone' => '+224620123456',
                 ]
             );
 
-        $quote = (new DeliveryQuoteService($db))->quote(
+        $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => 'USR_12'],
             ['addressName' => 'Bureau', 'userIdentifier' => 'USR_34']
         );
@@ -61,6 +67,8 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Domicile',
                     'latitude' => 9.6412,
                     'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 12,
                     'user_name' => 'Aissatou Barry',
                     'user_phone' => '+224620000001',
@@ -70,13 +78,15 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Bureau',
                     'latitude' => 9.6900,
                     'longitude' => -13.5200,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 34,
                     'user_name' => 'Mamadou Diallo',
                     'user_phone' => '+224620123456',
                 ]
             );
 
-        $quote = (new DeliveryQuoteService($db))->quote(
+        $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => '12'],
             'ADR_TOKEN'
         );
@@ -95,6 +105,8 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Domicile',
                     'latitude' => 9.6412,
                     'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 12,
                     'user_name' => 'Aissatou Barry',
                     'user_phone' => '+224620000001',
@@ -104,13 +116,15 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Bureau',
                     'latitude' => 9.6900,
                     'longitude' => -13.5200,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 34,
                     'user_name' => 'Mamadou Diallo',
                     'user_phone' => '+224620123456',
                 ]
             );
 
-        $quote = (new DeliveryQuoteService($db))->quote(
+        $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => 12],
             ['addressName' => 'Bureau', 'userIdentifier' => 34]
         );
@@ -132,6 +146,8 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Domicile',
                     'latitude' => 9.6412,
                     'longitude' => -13.5784,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 12,
                     'user_name' => 'Aissatou Barry',
                     'user_phone' => '224620000001',
@@ -141,13 +157,15 @@ final class DeliveryQuoteServiceTest extends TestCase
                     'address_name' => 'Bureau',
                     'latitude' => 9.6900,
                     'longitude' => -13.5200,
+                    'zone_admin_area_id' => null,
+                    'zone_name' => null,
                     'user_id' => 34,
                     'user_name' => 'Mamadou Diallo',
                     'user_phone' => '224620123456',
                 ]
             );
 
-        $quote = (new DeliveryQuoteService($db))->quote(
+        $quote = $this->service($db)->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => '+224 620 000 001'],
             ['addressName' => 'Bureau', 'userIdentifier' => '+224 620 123 456']
         );
@@ -160,9 +178,27 @@ final class DeliveryQuoteServiceTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('userIdentifier invalide.');
 
-        (new DeliveryQuoteService($this->createMock(Connection::class)))->quote(
+        $this->service($this->createMock(Connection::class))->quote(
             ['addressName' => 'Domicile', 'userIdentifier' => 'bad'],
             'ADR_TOKEN'
         );
+    }
+
+    private function service(Connection $db): DeliveryQuoteService
+    {
+        $pricing = $this->createMock(PricingEngine::class);
+        $pricing->method('calculate')->willReturn(new PricingResult(
+            distance: 7.4,
+            duration: 28,
+            basePrice: 15000,
+            distancePrice: 12000,
+            surcharges: [],
+            totalPrice: 27000,
+            currency: 'GNF',
+            pricingModelId: 1,
+            pricingRuleId: 2
+        ));
+
+        return new DeliveryQuoteService($db, $pricing);
     }
 }

@@ -3,19 +3,19 @@
 namespace App\Service;
 
 use App\Util\PhoneNumberNormalizer;
+use App\Dto\Pricing\PricingRequest;
+use App\Service\Pricing\PricingEngine;
 use Doctrine\DBAL\Connection;
 
 class DeliveryQuoteService
 {
     private const ROAD_DISTANCE_FACTOR = 1.25;
     private const AVERAGE_DRIVING_SPEED_KMH = 20.0;
-    private const BASE_COST = 15000;
-    private const COST_PER_KM = 1500;
-    private const MINIMUM_COST = 15000;
-    private const ROUNDING_STEP = 1000;
-    private const CURRENCY = 'GNF';
 
-    public function __construct(private Connection $db)
+    public function __construct(
+        private Connection $db,
+        private PricingEngine $pricing
+    )
     {
     }
 
@@ -24,7 +24,13 @@ class DeliveryQuoteService
      * @param string|array{addressName: string, userIdentifier: int|string} $destinationInput
      * @return array<string, mixed>
      */
-    public function quote(array $departureInput, string|array $destinationInput): array
+    public function quote(
+        array $departureInput,
+        string|array $destinationInput,
+        string $serviceType = 'STANDARD',
+        string $vehicleType = 'MOTO',
+        ?\DateTimeImmutable $date = null
+    ): array
     {
         $departure = $this->findAddressByNameAndUser(
             $departureInput['addressName'],
@@ -55,6 +61,18 @@ class DeliveryQuoteService
             (float) $destination['longitude']
         );
         $durationMinutes = $this->calculateDurationMinutes($distanceKm);
+        $zoneId = $this->resolvePricingZoneId(
+            $departure['zone_admin_area_id'] !== null ? (int) $departure['zone_admin_area_id'] : null,
+            $departure['zone_name'] !== null ? (string) $departure['zone_name'] : null
+        );
+        $pricing = $this->pricing->calculate(new PricingRequest(
+            distanceKm: $distanceKm,
+            durationMinutes: $durationMinutes,
+            serviceType: $serviceType,
+            vehicleType: $vehicleType,
+            zoneId: $zoneId,
+            date: $date ?? new \DateTimeImmutable()
+        ));
 
         return [
             'recipient' => $this->recipientPayload($destination),
@@ -68,8 +86,11 @@ class DeliveryQuoteService
             ],
             'distanceKm' => round($distanceKm, 1),
             'durationMinutes' => $durationMinutes,
-            'deliveryCost' => $this->calculateDeliveryCost($distanceKm),
-            'currency' => self::CURRENCY,
+            'serviceType' => $this->normalizeCode($serviceType),
+            'vehicleType' => $this->normalizeCode($vehicleType),
+            'pricing' => $pricing->toArray(),
+            'deliveryCost' => $pricing->totalPrice,
+            'currency' => $pricing->currency,
         ];
     }
 
@@ -85,6 +106,8 @@ class DeliveryQuoteService
                 a.display_label AS address_name,
                 ST_Y(gwl.final_geom::geometry) AS latitude,
                 ST_X(gwl.final_geom::geometry) AS longitude,
+                gaa.id AS zone_admin_area_id,
+                gaa.name AS zone_name,
                 u.id AS user_id,
                 u.name AS user_name,
                 u.phone AS user_phone
@@ -92,6 +115,7 @@ class DeliveryQuoteService
             JOIN address a ON a.id = ua.address_id
             JOIN user_account u ON u.id = ua.user_id
             LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
+            LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
             WHERE ua.user_id = :userId
               AND LOWER(TRIM(a.display_label)) = LOWER(TRIM(:addressName))
             ORDER BY ua.is_primary DESC, ua.id DESC
@@ -118,6 +142,8 @@ class DeliveryQuoteService
                 a.display_label AS address_name,
                 ST_Y(gwl.final_geom::geometry) AS latitude,
                 ST_X(gwl.final_geom::geometry) AS longitude,
+                gaa.id AS zone_admin_area_id,
+                gaa.name AS zone_name,
                 u.id AS user_id,
                 u.name AS user_name,
                 u.phone AS user_phone
@@ -125,6 +151,7 @@ class DeliveryQuoteService
             JOIN address a ON a.id = aq.address_id
             JOIN user_account u ON u.id = aq.created_by
             LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
+            LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
             WHERE aq.token = :token
               AND aq.is_active = true
               AND aq.revoked_at IS NULL
@@ -200,11 +227,31 @@ class DeliveryQuoteService
         return max(1, (int) ceil(($distanceKm / self::AVERAGE_DRIVING_SPEED_KMH) * 60));
     }
 
-    private function calculateDeliveryCost(float $distanceKm): int
+    private function resolvePricingZoneId(?int $adminAreaId, ?string $zoneName): ?int
     {
-        $cost = max(self::MINIMUM_COST, self::BASE_COST + ($distanceKm * self::COST_PER_KM));
+        if ($adminAreaId !== null) {
+            $zoneId = $this->db->fetchOne(
+                'SELECT id FROM zones WHERE admin_area_id = :adminAreaId LIMIT 1',
+                ['adminAreaId' => $adminAreaId]
+            );
 
-        return (int) (ceil($cost / self::ROUNDING_STEP) * self::ROUNDING_STEP);
+            if ($zoneId !== false) {
+                return (int) $zoneId;
+            }
+        }
+
+        if ($zoneName !== null && trim($zoneName) !== '') {
+            $zoneId = $this->db->fetchOne(
+                'SELECT id FROM zones WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) ORDER BY id DESC LIMIT 1',
+                ['name' => $zoneName]
+            );
+
+            if ($zoneId !== false) {
+                return (int) $zoneId;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -241,5 +288,20 @@ class DeliveryQuoteService
             $parts[0] ?? null,
             $parts[1] ?? null,
         ];
+    }
+
+    private function normalizeCode(string $code): string
+    {
+        $normalized = strtoupper(trim($code));
+        $normalized = strtr($normalized, [
+            'É' => 'E',
+            'È' => 'E',
+            'Ê' => 'E',
+            'À' => 'A',
+            'Ù' => 'U',
+            'Ç' => 'C',
+        ]);
+
+        return preg_replace('/[^A-Z0-9]+/', '_', $normalized) ?? $normalized;
     }
 }

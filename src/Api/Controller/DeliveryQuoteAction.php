@@ -30,8 +30,10 @@ final class DeliveryQuoteAction
         try {
             $departure = $this->readAddressReference($payload['departure'] ?? null, 'departure');
             $destination = $this->readDestination($payload['destination'] ?? null);
+            $serviceType = $this->readOptionalCode($payload['serviceType'] ?? null, 'STANDARD', 'serviceType');
+            $vehicleType = $this->readOptionalCode($payload['vehicleType'] ?? null, 'MOTO', 'vehicleType');
 
-            return new JsonResponse($this->quotes->quote($departure, $destination));
+            return new JsonResponse($this->quotes->quote($departure, $destination, $serviceType, $vehicleType));
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 400);
         } catch (\RuntimeException $e) {
@@ -79,5 +81,18 @@ final class DeliveryQuoteAction
         }
 
         return $this->readAddressReference($value, 'destination');
+    }
+
+    private function readOptionalCode(mixed $value, string $default, string $field): string
+    {
+        if ($value === null) {
+            return $default;
+        }
+
+        if (!is_string($value) || trim($value) === '') {
+            throw new \InvalidArgumentException(sprintf('%s est invalide', $field));
+        }
+
+        return trim($value);
     }
 }
