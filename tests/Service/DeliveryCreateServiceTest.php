@@ -140,8 +140,8 @@ final class DeliveryCreateServiceTest extends TestCase
             });
 
         $result = $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
-            'pickupAddressId' => 12,
-            'dropoffAddressId' => 45,
+            'pickup' => ['type' => 'address', 'id' => 12],
+            'dropoff' => ['type' => 'address', 'id' => 45],
             'serviceType' => 'STANDARD',
             'vehicleType' => 'MOTO',
             'recipient' => [
@@ -226,8 +226,8 @@ final class DeliveryCreateServiceTest extends TestCase
         $this->expectExceptionMessage('package.photoAssetId est invalide');
 
         $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
-            'pickupAddressId' => 12,
-            'dropoffAddressId' => 45,
+            'pickup' => ['type' => 'address', 'id' => 12],
+            'dropoff' => ['type' => 'address', 'id' => 45],
             'serviceType' => 'STANDARD',
             'vehicleType' => 'MOTO',
             'package' => [
@@ -297,14 +297,100 @@ final class DeliveryCreateServiceTest extends TestCase
         $this->expectExceptionMessage('package.photoAssetId est invalide');
 
         $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
-            'pickupAddressId' => 12,
-            'dropoffAddressId' => 45,
+            'pickup' => ['type' => 'address', 'id' => 12],
+            'dropoff' => ['type' => 'address', 'id' => 45],
             'serviceType' => 'STANDARD',
             'vehicleType' => 'MOTO',
             'package' => [
                 'photoAssetId' => 987,
             ],
         ]);
+    }
+
+    public function testCreateCanResolveAddressesFromUserAddressIds(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $subscriptions = $this->createMock(SubscriptionManager::class);
+        $planLimits = $this->createMock(PlanLimitChecker::class);
+        $usageCounters = $this->createMock(UsageCounterManager::class);
+        $pricing = $this->createMock(PricingEngine::class);
+
+        $user = (new UserAccount())->setPhone('+224620000001');
+        $subscription = $this->activeSubscription($user);
+
+        $subscriptions->method('getUser')->with(42)->willReturn($user);
+        $subscriptions->method('getActiveSubscription')->with($user)->willReturn($subscription);
+        $planLimits->expects(self::once())->method('assertCanCreateDelivery')->with($user);
+        $usageCounters->expects(self::once())->method('incrementDeliveriesCreated')->with($user, $subscription);
+        $pricing->expects(self::once())->method('calculate')->willReturn(
+            new PricingResult(1.0, 3, 1000, 500, [], 1500, 'GNF', 1, 2)
+        );
+
+        $db->expects(self::once())->method('beginTransaction');
+        $db->expects(self::once())->method('commit');
+        $db->method('fetchAssociative')->willReturnOnConsecutiveCalls(
+            [
+                'address_id' => 3,
+                'address_name' => 'STADE 28 SEPTEMBRE',
+                'latitude' => 9.54578982,
+                'longitude' => -13.67319345,
+                'zone_admin_area_id' => null,
+                'zone_name' => null,
+                'user_address_id' => 30,
+            ],
+            [
+                'address_id' => 1,
+                'address_name' => 'STADE NONGO',
+                'latitude' => 9.62412775,
+                'longitude' => -13.62648010,
+                'zone_admin_area_id' => null,
+                'zone_name' => null,
+                'user_address_id' => 10,
+            ],
+        );
+        $insertParams = null;
+        $db->expects(self::exactly(2))
+            ->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $params = []) use (&$insertParams): int {
+                if (str_contains($sql, 'INSERT INTO delivery_pricing_snapshot')) {
+                    return 1;
+                }
+                if (str_contains($sql, 'INSERT INTO delivery_status_history')) {
+                    return 1;
+                }
+                return 1;
+            });
+        $db->method('fetchOne')->willReturnCallback(static function (string $sql, array $params = []) use (&$insertParams): mixed {
+            if (str_contains($sql, 'FROM service_types')) {
+                return 1;
+            }
+            if (str_contains($sql, 'FROM vehicle_types')) {
+                return 1;
+            }
+            if (str_contains($sql, 'FROM customer_types')) {
+                return 'USER';
+            }
+            if (str_contains($sql, 'FROM zones WHERE admin_area_id')) {
+                return false;
+            }
+            if (str_contains($sql, 'INSERT INTO delivery_order')) {
+                $insertParams = $params;
+                return 123;
+            }
+            return false;
+        });
+
+        $result = $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
+            'pickup' => ['type' => 'user_address', 'id' => 30],
+            'dropoff' => ['type' => 'user_address', 'id' => 10],
+            'serviceType' => 'STANDARD',
+            'vehicleType' => 'MOTO',
+        ]);
+
+        self::assertSame(3, $insertParams['pickupAddressId']);
+        self::assertSame(1, $insertParams['dropoffAddressId']);
+        self::assertSame(3, $result['pickupAddress']['id']);
+        self::assertSame(1, $result['dropoffAddress']['id']);
     }
 
     private function service(

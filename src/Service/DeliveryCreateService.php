@@ -29,8 +29,8 @@ final class DeliveryCreateService
 
     /**
      * @param array{
-     *     pickupAddressId: int,
-     *     dropoffAddressId: int,
+     *     pickup: array{type: 'address'|'user_address', id: int},
+     *     dropoff: array{type: 'address'|'user_address', id: int},
      *     serviceType: string,
      *     vehicleType: string,
      *     scheduledAt?: ?\DateTimeImmutable,
@@ -62,8 +62,8 @@ final class DeliveryCreateService
 
         $this->planLimits->assertCanCreateDelivery($user);
 
-        $pickup = $this->findAddressById($payload['pickupAddressId']);
-        $dropoff = $this->findAddressById($payload['dropoffAddressId']);
+        $pickup = $this->resolveAddressReference($payload['pickup'], 'départ');
+        $dropoff = $this->resolveAddressReference($payload['dropoff'], 'destination');
         $this->assertAddressHasCoordinates($pickup, 'départ');
         $this->assertAddressHasCoordinates($dropoff, 'destination');
         $this->assertServiceTypeExists($payload['serviceType']);
@@ -138,8 +138,8 @@ final class DeliveryCreateService
                 [
                     'publicId' => $publicId,
                     'customerId' => $userId,
-                    'pickupAddressId' => $payload['pickupAddressId'],
-                    'dropoffAddressId' => $payload['dropoffAddressId'],
+                    'pickupAddressId' => (int) $pickup['address_id'],
+                    'dropoffAddressId' => (int) $dropoff['address_id'],
                     'serviceTypeCode' => $this->normalizeCode($payload['serviceType']),
                     'vehicleTypeCode' => $this->normalizeCode($payload['vehicleType']),
                     'scheduledAt' => ($payload['scheduledAt'] ?? null)?->format('Y-m-d H:i:sP'),
@@ -329,9 +329,21 @@ final class DeliveryCreateService
     }
 
     /**
+     * @param array{type: 'address'|'user_address', id: int} $reference
      * @return array<string, mixed>
      */
-    private function findAddressById(int $addressId): array
+    private function resolveAddressReference(array $reference, string $label): array
+    {
+        return match ($reference['type']) {
+            'address' => $this->findAddressById($reference['id'], $label),
+            'user_address' => $this->findAddressByUserAddressId($reference['id'], $label),
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function findAddressById(int $addressId, string $label = 'adresse'): array
     {
         $row = $this->db->fetchAssociative(
             <<<'SQL'
@@ -352,7 +364,39 @@ final class DeliveryCreateService
         );
 
         if ($row === false) {
-            throw new \RuntimeException(sprintf('Adresse %d introuvable.', $addressId));
+            throw new \RuntimeException(sprintf('Adresse de %s introuvable (addressId=%d).', $label, $addressId));
+        }
+
+        return $row;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function findAddressByUserAddressId(int $userAddressId, string $label): array
+    {
+        $row = $this->db->fetchAssociative(
+            <<<'SQL'
+                SELECT
+                    a.id AS address_id,
+                    a.display_label AS address_name,
+                    ST_Y(gwl.final_geom::geometry) AS latitude,
+                    ST_X(gwl.final_geom::geometry) AS longitude,
+                    gaa.id AS zone_admin_area_id,
+                    gaa.name AS zone_name,
+                    ua.id AS user_address_id
+                FROM user_address ua
+                JOIN address a ON a.id = ua.address_id
+                LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
+                LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
+                WHERE ua.id = :userAddressId
+                LIMIT 1
+                SQL,
+            ['userAddressId' => $userAddressId]
+        );
+
+        if ($row === false) {
+            throw new \RuntimeException(sprintf('Adresse de %s introuvable (userAddressId=%d).', $label, $userAddressId));
         }
 
         return $row;
@@ -361,7 +405,8 @@ final class DeliveryCreateService
     private function assertAddressHasCoordinates(array $address, string $label): void
     {
         if ($address['latitude'] === null || $address['longitude'] === null) {
-            throw new \RuntimeException(sprintf('Coordonnées GPS de %s introuvables.', $label));
+            $addressId = isset($address['address_id']) ? (int) $address['address_id'] : 0;
+            throw new \RuntimeException(sprintf('Coordonnées GPS de %s introuvables (addressId=%d).', $label, $addressId));
         }
     }
 

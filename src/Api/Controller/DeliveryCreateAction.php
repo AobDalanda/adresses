@@ -29,8 +29,8 @@ final class DeliveryCreateAction
         }
 
         try {
-            $pickupAddressId = $this->readRequiredPositiveInt($payload['pickupAddressId'] ?? null, 'pickupAddressId');
-            $dropoffAddressId = $this->readRequiredPositiveInt($payload['dropoffAddressId'] ?? null, 'dropoffAddressId');
+            $pickupReference = $this->readAddressReference($payload, 'pickup');
+            $dropoffReference = $this->readAddressReference($payload, 'dropoff');
             $serviceType = $this->readRequiredString($payload['serviceType'] ?? null, 'serviceType');
             $vehicleType = $this->readRequiredString($payload['vehicleType'] ?? null, 'vehicleType');
             $notes = $this->readOptionalString($payload['notes'] ?? null, 'notes');
@@ -43,8 +43,8 @@ final class DeliveryCreateAction
 
         try {
             $result = $this->deliveries->create((int) $auth['uid'], [
-                'pickupAddressId' => $pickupAddressId,
-                'dropoffAddressId' => $dropoffAddressId,
+                'pickup' => $pickupReference,
+                'dropoff' => $dropoffReference,
                 'serviceType' => $serviceType,
                 'vehicleType' => $vehicleType,
                 'scheduledAt' => $scheduledAt,
@@ -70,6 +70,38 @@ final class DeliveryCreateAction
         }
 
         return new JsonResponse($result, 201);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array{type: 'address'|'user_address', id: int}
+     */
+    private function readAddressReference(array $payload, string $prefix): array
+    {
+        $addressId = $this->readOptionalPositiveInt($payload[$prefix . 'AddressId'] ?? null, $prefix . 'AddressId');
+        $userAddressId = $this->readOptionalPositiveInt($payload[$prefix . 'UserAddressId'] ?? null, $prefix . 'UserAddressId');
+
+        if ($addressId !== null && $userAddressId !== null) {
+            throw new \InvalidArgumentException(sprintf(
+                'Utilisez soit %sAddressId soit %sUserAddressId, pas les deux',
+                $prefix,
+                $prefix
+            ));
+        }
+
+        if ($addressId !== null) {
+            return ['type' => 'address', 'id' => $addressId];
+        }
+
+        if ($userAddressId !== null) {
+            return ['type' => 'user_address', 'id' => $userAddressId];
+        }
+
+        throw new \InvalidArgumentException(sprintf(
+            '%sAddressId ou %sUserAddressId est requis',
+            $prefix,
+            $prefix
+        ));
     }
 
     private function readRequiredPositiveInt(mixed $value, string $field): int

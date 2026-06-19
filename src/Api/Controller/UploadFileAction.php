@@ -2,6 +2,8 @@
 
 namespace App\Api\Controller;
 
+use App\Service\DeliveryPackageUploadService;
+use App\Service\JwtAuthService;
 use App\Service\UploadStorageService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -11,7 +13,9 @@ use Symfony\Component\HttpFoundation\Request;
 final class UploadFileAction
 {
     public function __construct(
+        private readonly JwtAuthService $jwt,
         private readonly UploadStorageService $uploads,
+        private readonly DeliveryPackageUploadService $deliveryPackageUploads,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -33,7 +37,30 @@ final class UploadFileAction
         }
 
         try {
-            $stored = $this->uploads->store(trim($category), $file);
+            $normalizedCategory = trim($category);
+            if ($normalizedCategory === 'package_photo') {
+                $auth = $this->jwt->decodeFromRequest($request);
+                if (!$auth || ($auth['typ'] ?? null) !== 'mobile' || !isset($auth['uid'])) {
+                    return new JsonResponse(['message' => 'Unauthorized'], 401);
+                }
+
+                $stored = $this->deliveryPackageUploads->upload((int) $auth['uid'], $file);
+
+                return new JsonResponse([
+                    'success' => true,
+                    'category' => $stored['category'],
+                    'assetId' => $stored['assetId'],
+                    'assetPublicId' => $stored['assetPublicId'],
+                    'sessionId' => $stored['sessionId'],
+                    'path' => $stored['path'],
+                    'mimeType' => $stored['mimeType'],
+                    'size' => $stored['size'],
+                    'validationStatus' => $stored['validationStatus'],
+                    'consumed' => $stored['consumed'],
+                ], 201);
+            }
+
+            $stored = $this->uploads->store($normalizedCategory, $file);
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse([
                 'message' => $e->getMessage(),
