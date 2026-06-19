@@ -537,12 +537,16 @@ final class DeliveryCreateService
 
     private function resolveCustomerType(int $userId): string
     {
-        $type = $this->db->fetchOne(
-            'SELECT code FROM customer_types WHERE is_active = TRUE AND code = :code LIMIT 1',
-            ['code' => 'USER']
+        $accountType = $this->db->fetchOne(
+            'SELECT account_type FROM user_account WHERE id = :userId LIMIT 1',
+            ['userId' => $userId]
         );
 
-        return $type !== false ? (string) $type : 'USER';
+        if (!is_string($accountType) || trim($accountType) === '') {
+            return 'CLIENT';
+        }
+
+        return $this->normalizeCode($accountType);
     }
 
     private function normalizeCode(string $code): string

@@ -63,6 +63,8 @@ final class DeliveryCreateAction
             ], 402);
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 400);
+        } catch (\DomainException $e) {
+            return new JsonResponse(['message' => $e->getMessage()], 409);
         } catch (\RuntimeException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 404);
         } catch (\Throwable) {

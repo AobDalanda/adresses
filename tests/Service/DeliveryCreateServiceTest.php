@@ -44,7 +44,7 @@ final class DeliveryCreateServiceTest extends TestCase
             ->willReturnCallback(function (PricingRequest $request): PricingResult {
                 self::assertSame('STANDARD', $request->serviceType);
                 self::assertSame('MOTO', $request->vehicleType);
-                self::assertSame('USER', $request->customerType);
+                self::assertSame('CLIENT', $request->customerType);
                 self::assertGreaterThan(0, $request->distanceKm);
 
                 return new PricingResult(
@@ -125,7 +125,7 @@ final class DeliveryCreateServiceTest extends TestCase
                 }
 
                 if (str_contains($sql, 'FROM customer_types')) {
-                    return 'USER';
+                    return false;
                 }
 
                 if (str_contains($sql, 'FROM zones WHERE admin_area_id')) {
@@ -368,7 +368,7 @@ final class DeliveryCreateServiceTest extends TestCase
                 return 1;
             }
             if (str_contains($sql, 'FROM customer_types')) {
-                return 'USER';
+                return false;
             }
             if (str_contains($sql, 'FROM zones WHERE admin_area_id')) {
                 return false;
