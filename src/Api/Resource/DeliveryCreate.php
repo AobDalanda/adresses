@@ -8,7 +8,7 @@ use App\Api\Controller\DeliveryCreateAction;
 
 #[ApiResource(operations: [
     new Post(
-        uriTemplate: '/api/v1/deliveries',
+        uriTemplate: '/deliveries',
         controller: DeliveryCreateAction::class,
         read: false,
         deserialize: false,
