@@ -16,6 +16,8 @@ WORKDIR /app
 
 COPY . .
 
+COPY Caddyfile /etc/caddy/Caddyfile
+
 RUN composer install \
     --no-dev \
     --no-scripts \
@@ -26,4 +28,4 @@ RUN mkdir -p var/cache var/log
 
 EXPOSE 80
 
-CMD ["php", "-S", "0.0.0.0:80", "-t", "public"]
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]

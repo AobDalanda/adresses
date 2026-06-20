@@ -1,0 +1,22 @@
+{
+	servers {
+		enable_full_duplex
+	}
+
+	frankenphp
+}
+
+:80 {
+	root * public/
+	encode zstd br gzip
+
+	mercure {
+		transport_url {$MERCURE_TRANSPORT_URL:bolt:///data/mercure.db}
+		publisher_jwt {env.MERCURE_PUBLISHER_JWT_KEY} {env.MERCURE_PUBLISHER_JWT_ALG}
+		subscriber_jwt {env.MERCURE_SUBSCRIBER_JWT_KEY} {env.MERCURE_SUBSCRIBER_JWT_ALG}
+		cors_origins https://app.aldahim.com
+		publish_origins https://app.aldahim.com
+	}
+
+	php_server
+}
