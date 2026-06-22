@@ -7,7 +7,7 @@ use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification;
 
-final class FcmPushClient
+final class FcmPushClient implements PushClientInterface
 {
     private ?MessagingContract $messaging = null;
 

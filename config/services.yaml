@@ -82,6 +82,9 @@ services:
     App\Service\DeliveryOrderNotificationPublisherInterface:
         alias: App\Service\DeliveryOrderNotificationPublisher
 
+    App\Service\PushClientInterface:
+        alias: App\Service\FcmPushClient
+
     App\Api\Controller\DriverLocationUpdateAction:
         arguments:
             $trackingLogger: '@monolog.logger.tracking'

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
@@ -12,7 +13,9 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
 {
     public function __construct(
         private HubInterface $hub,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private Connection $db,
+        private PushClientInterface $push,
     ) {
     }
 
@@ -51,6 +54,8 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                 'topic' => self::NEW_DELIVERY_ORDER_TOPIC,
             ]);
 
+            $this->publishPushNotifications($payload);
+
             return true;
         } catch (\Throwable $exception) {
             $this->logger->error('Mercure new delivery order notification failed', [
@@ -61,5 +66,70 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
 
             return false;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function publishPushNotifications(array $payload): void
+    {
+        $tokens = $this->db->fetchFirstColumn(
+            <<<'SQL'
+                SELECT DISTINCT device.token
+                FROM user_push_device device
+                JOIN user_account account ON account.id = device.user_id
+                LEFT JOIN provider_profile profile ON profile.user_id = account.id
+                WHERE device.enabled = TRUE
+                  AND (
+                    LOWER(account.account_type) IN ('livreur', 'driver')
+                    OR (
+                        LOWER(account.account_type) = 'provider'
+                        AND profile.can_deliver = TRUE
+                        AND profile.validation_status = 'approved'
+                    )
+                  )
+                SQL,
+        );
+
+        if ($tokens === []) {
+            $this->logger->info('No driver FCM token registered for new delivery notification', [
+                'deliveryId' => $payload['delivery']['id'] ?? null,
+            ]);
+
+            return;
+        }
+
+        $sent = 0;
+        $errors = [];
+        $data = [
+            'type' => 'delivery_order.created',
+            'deliveryId' => (string) ($payload['delivery']['id'] ?? ''),
+            'status' => (string) ($payload['delivery']['status'] ?? ''),
+        ];
+
+        foreach ($tokens as $token) {
+            try {
+                $this->push->send(
+                    (string) $token,
+                    'Nouvelle livraison',
+                    'Une nouvelle livraison est disponible.',
+                    $data,
+                );
+                ++$sent;
+            } catch (\Throwable $exception) {
+                $errors[] = $exception->getMessage();
+                $this->logger->warning('Driver FCM new delivery notification failed', [
+                    'deliveryId' => $payload['delivery']['id'] ?? null,
+                    'exception' => $exception,
+                ]);
+            }
+        }
+
+        $this->logger->info('Driver FCM new delivery notification completed', [
+            'deliveryId' => $payload['delivery']['id'] ?? null,
+            'targetedTokens' => count($tokens),
+            'sent' => $sent,
+            'failed' => count($errors),
+        ]);
     }
 }
