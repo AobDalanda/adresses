@@ -44,4 +44,12 @@ final class DriverTrackingEndpointTest extends WebTestCase
 
         self::assertSame(401, $client->getResponse()->getStatusCode());
     }
+
+    public function testDeliveryNotificationsMercureAuthorizationRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('POST', '/api/v1/deliveries/mercure-authorization');
+
+        self::assertSame(401, $client->getResponse()->getStatusCode());
+    }
 }

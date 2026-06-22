@@ -79,6 +79,9 @@ services:
     App\Service\Tracking\LocationPublisherInterface:
         alias: App\Service\Tracking\LocationPublisher
 
+    App\Service\DeliveryOrderNotificationPublisherInterface:
+        alias: App\Service\DeliveryOrderNotificationPublisher
+
     App\Api\Controller\DriverLocationUpdateAction:
         arguments:
             $trackingLogger: '@monolog.logger.tracking'

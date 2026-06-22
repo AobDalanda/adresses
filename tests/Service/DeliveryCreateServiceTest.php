@@ -12,6 +12,7 @@ use App\Entity\UserSubscription;
 use App\Enum\SubscriptionPlanCode;
 use App\Enum\UserSubscriptionStatus;
 use App\Service\DeliveryCreateService;
+use App\Service\DeliveryOrderNotificationPublisherInterface;
 use App\Service\Pricing\PricingEngine;
 use App\Service\Subscription\PlanLimitChecker;
 use App\Service\Subscription\SubscriptionManager;
@@ -28,6 +29,7 @@ final class DeliveryCreateServiceTest extends TestCase
         $planLimits = $this->createMock(PlanLimitChecker::class);
         $usageCounters = $this->createMock(UsageCounterManager::class);
         $pricing = $this->createMock(PricingEngine::class);
+        $notificationPublisher = $this->createMock(DeliveryOrderNotificationPublisherInterface::class);
 
         $user = (new UserAccount())->setPhone('+224620000001');
         $subscription = $this->activeSubscription($user);
@@ -38,6 +40,10 @@ final class DeliveryCreateServiceTest extends TestCase
         $usageCounters->expects(self::once())
             ->method('incrementDeliveriesCreated')
             ->with($user, $subscription);
+        $notificationPublisher->expects(self::once())
+            ->method('publishNewDeliveryOrder')
+            ->with(self::callback(static fn (array $delivery): bool => $delivery['status'] === 'QUOTED'))
+            ->willReturn(true);
 
         $pricing->expects(self::once())
             ->method('calculate')
@@ -139,7 +145,14 @@ final class DeliveryCreateServiceTest extends TestCase
                 return false;
             });
 
-        $result = $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
+        $result = $this->service(
+            $db,
+            $pricing,
+            $subscriptions,
+            $planLimits,
+            $usageCounters,
+            $notificationPublisher
+        )->create(42, [
             'pickup' => ['type' => 'address', 'id' => 12],
             'dropoff' => ['type' => 'address', 'id' => 45],
             'serviceType' => 'STANDARD',
@@ -172,6 +185,7 @@ final class DeliveryCreateServiceTest extends TestCase
         $planLimits = $this->createMock(PlanLimitChecker::class);
         $usageCounters = $this->createMock(UsageCounterManager::class);
         $pricing = $this->createMock(PricingEngine::class);
+        $notificationPublisher = $this->createMock(DeliveryOrderNotificationPublisherInterface::class);
 
         $user = (new UserAccount())->setPhone('+224620000001');
         $subscription = $this->activeSubscription($user);
@@ -180,6 +194,7 @@ final class DeliveryCreateServiceTest extends TestCase
         $subscriptions->method('getActiveSubscription')->willReturn($subscription);
         $planLimits->expects(self::once())->method('assertCanCreateDelivery')->with($user);
         $usageCounters->expects(self::never())->method('incrementDeliveriesCreated');
+        $notificationPublisher->expects(self::never())->method('publishNewDeliveryOrder');
         $pricing->expects(self::never())->method('calculate');
         $db->expects(self::never())->method('beginTransaction');
 
@@ -225,7 +240,7 @@ final class DeliveryCreateServiceTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('package.photoAssetId est invalide');
 
-        $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters)->create(42, [
+        $this->service($db, $pricing, $subscriptions, $planLimits, $usageCounters, $notificationPublisher)->create(42, [
             'pickup' => ['type' => 'address', 'id' => 12],
             'dropoff' => ['type' => 'address', 'id' => 45],
             'serviceType' => 'STANDARD',
@@ -399,8 +414,16 @@ final class DeliveryCreateServiceTest extends TestCase
         SubscriptionManager $subscriptions,
         PlanLimitChecker $planLimits,
         UsageCounterManager $usageCounters,
+        ?DeliveryOrderNotificationPublisherInterface $notificationPublisher = null,
     ): DeliveryCreateService {
-        return new DeliveryCreateService($db, $pricing, $subscriptions, $planLimits, $usageCounters);
+        return new DeliveryCreateService(
+            $db,
+            $pricing,
+            $subscriptions,
+            $planLimits,
+            $usageCounters,
+            $notificationPublisher ?? $this->createMock(DeliveryOrderNotificationPublisherInterface::class)
+        );
     }
 
     private function activeSubscription(UserAccount $user): UserSubscription

@@ -24,6 +24,7 @@ final class DeliveryCreateService
         private readonly SubscriptionManager $subscriptions,
         private readonly PlanLimitChecker $planLimits,
         private readonly UsageCounterManager $usageCounters,
+        private readonly DeliveryOrderNotificationPublisherInterface $notificationPublisher,
     ) {
     }
 
@@ -181,15 +182,15 @@ final class DeliveryCreateService
                         SQL,
                     [
                         'deliveryOrderId' => $orderId,
-                        'description' => $package['description'],
-                        'declaredValueAmount' => $package['declaredValueAmount'],
-                        'declaredValueCurrency' => $package['declaredValueCurrency'],
-                        'weightKg' => $package['weightKg'],
-                        'lengthCm' => $package['lengthCm'],
-                        'widthCm' => $package['widthCm'],
-                        'heightCm' => $package['heightCm'],
-                        'fragile' => $package['fragile'],
-                        'photoAssetId' => $package['photoAssetId'],
+                        'description' => $package['description'] ?? null,
+                        'declaredValueAmount' => $package['declaredValueAmount'] ?? null,
+                        'declaredValueCurrency' => $package['declaredValueCurrency'] ?? null,
+                        'weightKg' => $package['weightKg'] ?? null,
+                        'lengthCm' => $package['lengthCm'] ?? null,
+                        'widthCm' => $package['widthCm'] ?? null,
+                        'heightCm' => $package['heightCm'] ?? null,
+                        'fragile' => $package['fragile'] ?? false,
+                        'photoAssetId' => $package['photoAssetId'] ?? null,
                         ]
                 );
 
@@ -293,7 +294,8 @@ final class DeliveryCreateService
 
         $this->usageCounters->incrementDeliveriesCreated($user, $subscription);
 
-        return [
+        $createdAt = new \DateTimeImmutable();
+        $delivery = [
             'id' => $publicId,
             'status' => 'QUOTED',
             'pickupAddress' => [
@@ -324,8 +326,12 @@ final class DeliveryCreateService
             ],
             'scheduledAt' => ($payload['scheduledAt'] ?? null)?->format(\DATE_ATOM),
             'notes' => $payload['notes'] ?? null,
-            'createdAt' => (new \DateTimeImmutable())->format(\DATE_ATOM),
+            'createdAt' => $createdAt->format(\DATE_ATOM),
         ];
+
+        $this->notificationPublisher->publishNewDeliveryOrder($delivery);
+
+        return $delivery;
     }
 
     /**

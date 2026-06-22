@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Integration;
 
 use App\Repository\DriverLocationRepositoryInterface;
+use App\Service\DeliveryOrderNotificationPublisherInterface;
 use App\Service\Tracking\DriverTrackingService;
 use App\Service\Tracking\LocationPublisherInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -27,6 +28,10 @@ final class DriverTrackingContainerTest extends KernelTestCase
             LocationPublisherInterface::class,
             $container->get(LocationPublisherInterface::class)
         );
+        self::assertInstanceOf(
+            DeliveryOrderNotificationPublisherInterface::class,
+            $container->get(DeliveryOrderNotificationPublisherInterface::class)
+        );
     }
 
     public function testMercureAuthorizationCookieIsHttpOnlyAndScopedToHub(): void
@@ -37,6 +42,22 @@ final class DriverTrackingContainerTest extends KernelTestCase
         $cookie = $authorization->createCookie(
             Request::create('http://localhost/api/v1/drivers/15/mercure-authorization'),
             ['driver/15/location']
+        );
+
+        self::assertSame('mercureAuthorization', $cookie->getName());
+        self::assertSame('/.well-known/mercure', $cookie->getPath());
+        self::assertTrue($cookie->isHttpOnly());
+        self::assertSame('strict', $cookie->getSameSite());
+    }
+
+    public function testDeliveryNotificationMercureAuthorizationCookieIsScopedToHub(): void
+    {
+        self::bootKernel();
+        $authorization = static::getContainer()->get(Authorization::class);
+
+        $cookie = $authorization->createCookie(
+            Request::create('http://localhost/api/v1/deliveries/mercure-authorization'),
+            [DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC]
         );
 
         self::assertSame('mercureAuthorization', $cookie->getName());
