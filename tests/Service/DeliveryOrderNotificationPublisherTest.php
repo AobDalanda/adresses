@@ -35,7 +35,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         $publisher = new DeliveryOrderNotificationPublisher(
             $hub,
             new NullLogger(),
-            $this->connectionWithTokens([]),
+            $this->connectionWithDriverTargets([]),
             $this->createMock(PushClientInterface::class),
         );
 
@@ -64,7 +64,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         $publisher = new DeliveryOrderNotificationPublisher(
             $hub,
             new NullLogger(),
-            $this->connectionWithTokens([]),
+            $this->connectionWithDriverTargets([]),
             $this->createMock(PushClientInterface::class),
         );
 
@@ -85,17 +85,21 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
                 self::callback(static fn (string $token): bool => in_array($token, ['token-1', 'token-2'], true)),
                 'Nouvelle livraison',
                 'Une nouvelle livraison est disponible.',
-                [
-                    'type' => 'delivery_order.created',
-                    'deliveryId' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
-                    'status' => 'QUOTED',
-                ],
+                self::callback(static fn (array $data): bool =>
+                    $data['type'] === 'delivery_order.created'
+                    && $data['deliveryId'] === '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b'
+                    && $data['status'] === 'QUOTED'
+                    && is_string($data['notificationId'] ?? null)
+                ),
             );
 
         $publisher = new DeliveryOrderNotificationPublisher(
             $hub,
             new NullLogger(),
-            $this->connectionWithTokens(['token-1', 'token-2']),
+            $this->connectionWithDriverTargets([
+                ['user_id' => 42, 'token' => 'token-1'],
+                ['user_id' => 43, 'token' => 'token-2'],
+            ]),
             $push,
         );
 
@@ -113,16 +117,72 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         ]));
     }
 
+    public function testPersistsInboxNotificationForEligibleDriverWithoutFcmToken(): void
+    {
+        $hub = $this->createMock(HubInterface::class);
+        $hub->method('publish')->willReturn('event-id');
+
+        $executedStatements = [];
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')
+            ->willReturn([['user_id' => 43, 'token' => null]]);
+        $db->method('executeStatement')
+            ->willReturnCallback(
+                static function (string $sql, array $params = []) use (&$executedStatements): int {
+                    $executedStatements[] = [$sql, $params];
+
+                    return 1;
+                }
+            );
+
+        $push = $this->createMock(PushClientInterface::class);
+        $push->expects(self::never())->method('send');
+
+        $publisher = new DeliveryOrderNotificationPublisher($hub, new NullLogger(), $db, $push);
+
+        self::assertTrue($publisher->publishNewDeliveryOrder([
+            'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
+            'status' => 'QUOTED',
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
+            'pricing' => [
+                'distanceKm' => 8.4,
+                'durationMinutes' => 26,
+                'totalAmount' => 1500,
+                'currency' => 'GNF',
+            ],
+        ]));
+
+        self::assertTrue($this->hasStatement($executedStatements, 'INSERT INTO outbox_event'));
+        self::assertTrue($this->hasStatement($executedStatements, 'INSERT INTO user_notification'));
+        self::assertTrue($this->hasStatement($executedStatements, 'push_status = :status'));
+    }
+
     /**
-     * @param list<string> $tokens
+     * @param list<array{user_id: int, token: ?string}> $targets
      */
-    private function connectionWithTokens(array $tokens): Connection
+    private function connectionWithDriverTargets(array $targets): Connection
     {
         $db = $this->createMock(Connection::class);
-        $db->method('fetchFirstColumn')
-            ->with(self::stringContains('FROM user_push_device'))
-            ->willReturn($tokens);
+        $db->method('fetchAllAssociative')
+            ->with(self::stringContains('FROM user_account account'))
+            ->willReturn($targets);
+        $db->method('executeStatement')->willReturn(1);
 
         return $db;
+    }
+
+    /**
+     * @param list<array{0: string, 1: array<string, mixed>}> $statements
+     */
+    private function hasStatement(array $statements, string $needle): bool
+    {
+        foreach ($statements as [$sql]) {
+            if (str_contains($sql, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
