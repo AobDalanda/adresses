@@ -38,33 +38,59 @@ final readonly class PushDeviceRegisterAction
             return new JsonResponse(['message' => 'Identifiant de terminal invalide'], 422);
         }
 
-        $this->db->executeStatement(
-            <<<'SQL'
-                INSERT INTO user_push_device (
-                    user_id, token_hash, token, platform, device_id, enabled,
-                    last_seen_at, created_at, updated_at
-                )
-                VALUES (
-                    :userId, :tokenHash, :token, :platform, :deviceId, TRUE,
-                    now(), now(), now()
-                )
-                ON CONFLICT (token_hash) DO UPDATE SET
-                    user_id = EXCLUDED.user_id,
-                    token = EXCLUDED.token,
-                    platform = EXCLUDED.platform,
-                    device_id = EXCLUDED.device_id,
-                    enabled = TRUE,
-                    last_seen_at = now(),
-                    updated_at = now()
-                SQL,
-            [
-                'userId' => $user->getId(),
-                'tokenHash' => hash('sha256', $token),
-                'token' => $token,
-                'platform' => $platform,
-                'deviceId' => $deviceId === '' ? null : $deviceId,
-            ],
-        );
+        $deviceId = $deviceId === '' ? null : $deviceId;
+        $tokenHash = hash('sha256', $token);
+
+        $this->db->transactional(function () use ($user, $token, $tokenHash, $platform, $deviceId): void {
+            if ($deviceId !== null) {
+                $this->db->executeStatement(
+                    <<<'SQL'
+                        UPDATE user_push_device
+                        SET enabled = FALSE,
+                            updated_at = now()
+                        WHERE user_id = :userId
+                          AND platform = :platform
+                          AND device_id = :deviceId
+                          AND token_hash <> :tokenHash
+                          AND enabled = TRUE
+                        SQL,
+                    [
+                        'userId' => $user->getId(),
+                        'platform' => $platform,
+                        'deviceId' => $deviceId,
+                        'tokenHash' => $tokenHash,
+                    ],
+                );
+            }
+
+            $this->db->executeStatement(
+                <<<'SQL'
+                    INSERT INTO user_push_device (
+                        user_id, token_hash, token, platform, device_id, enabled,
+                        last_seen_at, created_at, updated_at
+                    )
+                    VALUES (
+                        :userId, :tokenHash, :token, :platform, :deviceId, TRUE,
+                        now(), now(), now()
+                    )
+                    ON CONFLICT (token_hash) DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        token = EXCLUDED.token,
+                        platform = EXCLUDED.platform,
+                        device_id = EXCLUDED.device_id,
+                        enabled = TRUE,
+                        last_seen_at = now(),
+                        updated_at = now()
+                    SQL,
+                [
+                    'userId' => $user->getId(),
+                    'tokenHash' => $tokenHash,
+                    'token' => $token,
+                    'platform' => $platform,
+                    'deviceId' => $deviceId,
+                ],
+            );
+        });
 
         return new JsonResponse(null, 204);
     }

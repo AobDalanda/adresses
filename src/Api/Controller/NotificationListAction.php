@@ -23,11 +23,15 @@ final readonly class NotificationListAction
             return new JsonResponse(['message' => 'Unauthorized'], 401);
         }
 
+        $unreadOnly = filter_var($request->query->get('unreadOnly', false), FILTER_VALIDATE_BOOL);
+        $unreadFilter = $unreadOnly ? 'AND read_at IS NULL' : '';
+
         $rows = $this->db->fetchAllAssociative(
-            <<<'SQL'
+            <<<SQL
                 SELECT id, type, title, body, data, read_at, created_at
                 FROM user_notification
                 WHERE user_id = :userId
+                  {$unreadFilter}
                 ORDER BY created_at DESC, id DESC
                 LIMIT 100
                 SQL,

@@ -20,31 +20,69 @@ final class PushDeviceRegisterActionTest extends TestCase
 {
     public function testRegisterStoresFcmTokenForAuthenticatedMobileUser(): void
     {
+        $statements = [];
         $db = $this->createMock(Connection::class);
         $db->expects(self::once())
+            ->method('transactional')
+            ->willReturnCallback(static fn (callable $callback): mixed => $callback());
+        $db->expects(self::exactly(2))
             ->method('executeStatement')
-            ->with(
-                self::stringContains('INSERT INTO user_push_device'),
-                self::callback(static fn (array $params): bool => $params === [
-                    'userId' => 42,
-                    'tokenHash' => hash('sha256', 'fcm-token'),
-                    'token' => 'fcm-token',
-                    'platform' => 'android',
-                    'deviceId' => 'device-1',
-                ])
-            )
-            ->willReturn(1);
+            ->willReturnCallback(static function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = [$sql, $params];
+
+                return 1;
+            });
 
         $response = (new PushDeviceRegisterAction($db, $this->users(42)))->__invoke(
             new Request(content: '{"token":" fcm-token ","platform":"ANDROID","deviceId":"device-1"}')
         );
 
         self::assertSame(204, $response->getStatusCode());
+        self::assertStringContainsString('UPDATE user_push_device', $statements[0][0]);
+        self::assertSame([
+            'userId' => 42,
+            'platform' => 'android',
+            'deviceId' => 'device-1',
+            'tokenHash' => hash('sha256', 'fcm-token'),
+        ], $statements[0][1]);
+        self::assertStringContainsString('INSERT INTO user_push_device', $statements[1][0]);
+        self::assertSame([
+            'userId' => 42,
+            'tokenHash' => hash('sha256', 'fcm-token'),
+            'token' => 'fcm-token',
+            'platform' => 'android',
+            'deviceId' => 'device-1',
+        ], $statements[1][1]);
+    }
+
+    public function testRegisterWithoutDeviceIdDoesNotDisableOtherTokens(): void
+    {
+        $statements = [];
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('transactional')
+            ->willReturnCallback(static fn (callable $callback): mixed => $callback());
+        $db->expects(self::once())
+            ->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $params = []) use (&$statements): int {
+                $statements[] = [$sql, $params];
+
+                return 1;
+            });
+
+        $response = (new PushDeviceRegisterAction($db, $this->users(42)))->__invoke(
+            new Request(content: '{"token":"fcm-token","platform":"ios"}')
+        );
+
+        self::assertSame(204, $response->getStatusCode());
+        self::assertStringContainsString('INSERT INTO user_push_device', $statements[0][0]);
+        self::assertNull($statements[0][1]['deviceId']);
     }
 
     public function testRegisterRejectsInvalidPayload(): void
     {
         $db = $this->createMock(Connection::class);
+        $db->expects(self::never())->method('transactional');
         $db->expects(self::never())->method('executeStatement');
 
         $response = (new PushDeviceRegisterAction($db, $this->users(42)))->__invoke(
@@ -58,6 +96,7 @@ final class PushDeviceRegisterActionTest extends TestCase
     public function testRegisterRequiresMobileAuthentication(): void
     {
         $db = $this->createMock(Connection::class);
+        $db->expects(self::never())->method('transactional');
         $db->expects(self::never())->method('executeStatement');
 
         $response = (new PushDeviceRegisterAction($db, $this->users(null)))->__invoke(

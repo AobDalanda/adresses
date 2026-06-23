@@ -53,6 +53,28 @@ final class NotificationListActionTest extends TestCase
         self::assertSame(401, $response->getStatusCode());
     }
 
+    public function testListCanReturnUnreadNotificationsOnly(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())
+            ->method('fetchAllAssociative')
+            ->with(
+                self::callback(static fn (string $sql): bool =>
+                    str_contains($sql, 'FROM user_notification')
+                    && str_contains($sql, 'read_at IS NULL')
+                ),
+                ['userId' => 42]
+            )
+            ->willReturn([]);
+
+        $response = (new NotificationListAction($db, $this->users(42)))->__invoke(
+            new Request(query: ['unreadOnly' => 'true'])
+        );
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('{"notifications":[]}', $response->getContent());
+    }
+
     private function users(?int $userId): AuthenticatedUserResolver
     {
         $security = $this->createMock(Security::class);

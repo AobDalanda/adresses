@@ -186,6 +186,10 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             }
         }
 
+        foreach ($targets as $userId => $tokens) {
+            $targets[$userId] = array_values(array_unique($tokens));
+        }
+
         return $targets;
     }
 
@@ -235,6 +239,8 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             'notificationId' => $notificationId,
             'deliveryId' => (string) ($payload['delivery']['id'] ?? ''),
             'status' => (string) ($payload['delivery']['status'] ?? ''),
+            'collapseKey' => 'delivery_order.' . (string) ($payload['delivery']['id'] ?? ''),
+            'notificationGroup' => 'delivery_order',
         ];
 
         foreach ($tokens as $token) {

@@ -33,6 +33,13 @@ final class FcmPushClient implements PushClientInterface
             ->withNotification(Notification::create($title, $body))
             ->withData($data);
 
+        $collapseKey = $data['collapseKey'] ?? null;
+        if (is_string($collapseKey) && $collapseKey !== '') {
+            $message = $message
+                ->withAndroidConfig(['collapse_key' => $collapseKey])
+                ->withApnsConfig(['headers' => ['apns-collapse-id' => $collapseKey]]);
+        }
+
         try {
             $this->getMessaging()->send($message);
         } catch (\Throwable $e) {
