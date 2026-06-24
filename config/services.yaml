@@ -117,6 +117,7 @@ services:
     App\Service\FcmPushClient:
         arguments:
             $credentialsPath: '%firebase_credentials%'
+            $messaging: null
 
     App\Service\WhatsAppOtpClient:
         arguments:

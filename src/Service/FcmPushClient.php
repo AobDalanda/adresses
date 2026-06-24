@@ -9,10 +9,9 @@ use Kreait\Firebase\Messaging\Notification;
 
 final class FcmPushClient implements PushClientInterface
 {
-    private ?MessagingContract $messaging = null;
-
     public function __construct(
-        private string $credentialsPath
+        private string $credentialsPath,
+        private ?MessagingContract $messaging = null,
     ) {
     }
 
@@ -29,7 +28,8 @@ final class FcmPushClient implements PushClientInterface
      */
     public function send(string $fcmToken, string $title, string $body, array $data = []): void
     {
-        $message = CloudMessage::withTarget('token', $fcmToken)
+        $message = CloudMessage::new()
+            ->toToken($fcmToken)
             ->withNotification(Notification::create($title, $body))
             ->withData($data);
 
