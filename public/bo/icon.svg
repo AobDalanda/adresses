@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Aldahim">
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <path d="M126 354 236 118c8-17 32-17 40 0l110 236c7 15-4 32-21 32h-42c-9 0-17-5-21-14l-15-34h-103l-15 34c-4 9-12 14-21 14h-42c-17 0-28-17-20-32Z" fill="#fff"/>
+  <path d="M209 282h54l-27-64-27 64Z" fill="#0f766e"/>
+  <path d="M155 405h202" stroke="#b7f7e8" stroke-width="26" stroke-linecap="round"/>
+</svg>

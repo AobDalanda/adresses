@@ -1,0 +1,35 @@
+{
+  "name": "Aldahim Back-office",
+  "short_name": "Aldahim BO",
+  "description": "Console back-office installable pour l'administration Aldahim.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/bo/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Prestataires",
+      "short_name": "Prestataires",
+      "url": "/providers",
+      "icons": [
+        {
+          "src": "/bo/icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

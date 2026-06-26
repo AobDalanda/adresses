@@ -1,0 +1,175 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controller;
+
+use App\Security\UserRoleProvider;
+use App\Service\JwtAuthService;
+use App\Service\OtpService;
+use App\Service\UserAccountAssetUrlResolver;
+use App\Service\UserAccountService;
+use App\Util\PhoneNumberNormalizer;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/v1/back-office/auth')]
+final class BackOfficeAuthController extends AbstractController
+{
+    private const BACK_OFFICE_ROLES = [
+        'ROLE_ADMIN',
+        'ROLE_PROVIDER_REVIEWER',
+        'ROLE_PROVIDER_APPROVER',
+        'ROLE_PROVIDER_SECURITY_ADMIN',
+    ];
+
+    public function __construct(
+        private readonly OtpService $otpService,
+        private readonly UserAccountService $users,
+        private readonly JwtAuthService $jwt,
+        private readonly UserRoleProvider $roles,
+        private readonly UserAccountAssetUrlResolver $assetUrlResolver
+    ) {
+    }
+
+    #[Route('/otp/request', methods: ['POST'])]
+    public function requestOtp(Request $request): JsonResponse
+    {
+        $phone = $this->phoneFromRequest($request);
+        if ($phone instanceof JsonResponse) {
+            return $phone;
+        }
+
+        $user = $this->users->findVerifiedUserByPhone($phone);
+        if ($user === null) {
+            return $this->json(['message' => 'USER_NOT_FOUND'], 404);
+        }
+
+        if (!$this->canAccessBackOffice($user)) {
+            return $this->json(['message' => 'BACK_OFFICE_FORBIDDEN'], 403);
+        }
+
+        try {
+            $this->otpService->requestOtp($phone);
+        } catch (\Throwable) {
+            return $this->json(['message' => 'Erreur lors de l’envoi OTP'], 500);
+        }
+
+        return $this->json(['message' => 'OTP envoyé']);
+    }
+
+    #[Route('/otp/verify', methods: ['POST'])]
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $payload = $this->jsonPayload($request);
+        if ($payload instanceof JsonResponse) {
+            return $payload;
+        }
+
+        $phone = $payload['phone'] ?? null;
+        $otp = $payload['otp'] ?? null;
+        if (!is_string($phone) || $phone === '' || !is_string($otp) || $otp === '') {
+            return $this->json(['message' => 'phone et otp sont requis'], 400);
+        }
+
+        $phone = PhoneNumberNormalizer::normalize($phone);
+        if ($phone === '') {
+            return $this->json(['message' => 'phone est invalide'], 400);
+        }
+
+        if (!$this->otpService->verifyOtp($phone, $otp)) {
+            return $this->json(['message' => 'OTP invalide'], 401);
+        }
+
+        $user = $this->users->findVerifiedUserByPhone($phone);
+        if ($user === null) {
+            return $this->json(['message' => 'USER_NOT_FOUND'], 404);
+        }
+
+        if (!$this->canAccessBackOffice($user)) {
+            return $this->json(['message' => 'BACK_OFFICE_FORBIDDEN'], 403);
+        }
+
+        $tokenVersion = $this->users->rotateTokenVersion((int) $user['id']);
+        $token = $this->jwt->issueToken([
+            'sub' => $phone,
+            'typ' => 'mobile',
+            'uid' => $user['id'],
+            'tv' => $tokenVersion,
+        ]);
+
+        return $this->json([
+            'token' => $token,
+            'refreshToken' => $this->jwt->issueToken([
+                'sub' => $phone,
+                'typ' => 'mobile_refresh',
+                'uid' => $user['id'],
+                'tv' => $tokenVersion,
+            ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
+            'user' => $this->userPayload($user),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>|JsonResponse
+     */
+    private function jsonPayload(Request $request): array|JsonResponse
+    {
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['message' => 'Invalid JSON body'], 400);
+        }
+
+        return $payload;
+    }
+
+    private function phoneFromRequest(Request $request): string|JsonResponse
+    {
+        $payload = $this->jsonPayload($request);
+        if ($payload instanceof JsonResponse) {
+            return $payload;
+        }
+
+        $phone = $payload['phone'] ?? null;
+        if (!is_string($phone) || $phone === '') {
+            return $this->json(['message' => 'phone est requis'], 400);
+        }
+
+        $phone = PhoneNumberNormalizer::normalize($phone);
+        if ($phone === '') {
+            return $this->json(['message' => 'phone est invalide'], 400);
+        }
+
+        return $phone;
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     */
+    private function canAccessBackOffice(array $user): bool
+    {
+        if (($user['accountType'] ?? null) === 'admin') {
+            return true;
+        }
+
+        $roles = $this->roles->rolesForUser((int) $user['id']);
+
+        return array_intersect(self::BACK_OFFICE_ROLES, $roles) !== [];
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    private function userPayload(array $user): array
+    {
+        $payload = $this->assetUrlResolver->enrich($user);
+        $payload['email'] = isset($user['email']) && is_string($user['email']) && $user['email'] !== ''
+            ? $user['email']
+            : null;
+
+        return $payload;
+    }
+}

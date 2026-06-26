@@ -4,6 +4,20 @@
 # To list all registered routes, run the following command:
 #   bin/console debug:router
 
+back_office_pwa:
+    path: /
+    host: bo.aldahim.com
+    controller: App\Controller\BackOfficeController::index
+    methods: [GET]
+
+back_office_pwa_fallback:
+    path: /{path}
+    host: bo.aldahim.com
+    controller: App\Controller\BackOfficeController::index
+    methods: [GET]
+    requirements:
+        path: '^(overview|providers|subscriptions|settings)$'
+
 home:
     path: /
     controller: App\Controller\HomeController::index

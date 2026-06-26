@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="color-scheme" content="light">
+    <meta name="application-name" content="Aldahim BO">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Aldahim BO">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Aldahim Back-office</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/bo/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/bo/icon.svg">
+    <link rel="stylesheet" href="/bo/styles.css">
+    <script defer src="/bo/app.js"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="Navigation principale">
+            <div class="brand">
+                <img src="/bo/icon.svg" alt="" width="36" height="36">
+                <div>
+                    <strong>Aldahim</strong>
+                    <span>Back-office</span>
+                </div>
+            </div>
+            <nav class="nav">
+                <button class="nav-item active" type="button" data-view="overview">Vue d'ensemble</button>
+                <button class="nav-item" type="button" data-view="providers">Prestataires</button>
+                <button class="nav-item" type="button" data-view="subscriptions">Abonnements</button>
+                <button class="nav-item" type="button" data-view="settings">Accès</button>
+            </nav>
+            <div class="install-card">
+                <span class="status-dot" data-online-dot></span>
+                <span data-online-label>Connexion</span>
+                <button class="icon-button" type="button" data-install hidden title="Installer l'application" aria-label="Installer l'application">↓</button>
+            </div>
+        </aside>
+
+        <main class="workspace" data-app-workspace>
+            <header class="topbar">
+                <div>
+                    <h1 data-view-title>Vue d'ensemble</h1>
+                    <p data-view-subtitle>Suivi opérationnel des comptes, prestataires et accès mobile.</p>
+                </div>
+                <div class="actions">
+                    <button class="secondary-button" type="button" data-refresh>Actualiser</button>
+                    <button class="primary-button" type="button" data-open-login>Se connecter</button>
+                </div>
+            </header>
+
+            <section class="notice" data-auth-notice hidden>
+                <strong>Connexion requise</strong>
+                <span>Identifiez-vous avec votre numéro et le code OTP pour charger les données protégées.</span>
+            </section>
+
+            <section class="metrics" aria-label="Indicateurs">
+                <article class="metric">
+                    <span>Prestataires</span>
+                    <strong data-metric="providers">--</strong>
+                </article>
+                <article class="metric">
+                    <span>Approuvés</span>
+                    <strong data-metric="approved">--</strong>
+                </article>
+                <article class="metric">
+                    <span>En attente</span>
+                    <strong data-metric="pending">--</strong>
+                </article>
+                <article class="metric">
+                    <span>Plans actifs</span>
+                    <strong data-metric="plans">--</strong>
+                </article>
+            </section>
+
+            <section class="panel" data-view-panel="overview">
+                <div class="panel-heading">
+                    <h2>Activité récente</h2>
+                    <span data-last-sync>Jamais synchronisé</span>
+                </div>
+                <div class="summary-grid">
+                    <div>
+                        <h3>Prestataires à examiner</h3>
+                        <p data-summary="providers">Connectez un jeton administrateur pour afficher les dossiers.</p>
+                    </div>
+                    <div>
+                        <h3>Mode hors-ligne</h3>
+                        <p>La console reste ouvrable sans réseau. Les données protégées se rechargent dès que l'API répond.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel hidden" data-view-panel="providers">
+                <div class="panel-heading">
+                    <h2>Prestataires</h2>
+                    <select data-provider-filter aria-label="Filtrer les prestataires">
+                        <option value="">Tous les statuts</option>
+                        <option value="pending">En attente</option>
+                        <option value="approved">Approuvés</option>
+                        <option value="rejected">Rejetés</option>
+                        <option value="suspended">Suspendus</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Téléphone</th>
+                                <th>Statut</th>
+                                <th>Livraison</th>
+                                <th>Transport</th>
+                            </tr>
+                        </thead>
+                        <tbody data-provider-rows>
+                            <tr><td colspan="5">Aucune donnée chargée.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel hidden" data-view-panel="subscriptions">
+                <div class="panel-heading">
+                    <h2>Plans d'abonnement</h2>
+                    <span data-plans-count>--</span>
+                </div>
+                <div class="cards" data-plan-cards></div>
+            </section>
+
+            <section class="panel hidden" data-view-panel="settings">
+                <div class="panel-heading">
+                    <h2>Accès API</h2>
+                    <button class="secondary-button" type="button" data-logout>Déconnecter</button>
+                </div>
+                <div class="session-card">
+                    <span>Utilisateur connecté</span>
+                    <strong data-session-user>Non connecté</strong>
+                    <p class="help" data-session-detail>La session reste uniquement dans ce navigateur.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <section class="login-screen" data-login-screen>
+        <div class="login-panel">
+            <div class="login-brand">
+                <img src="/bo/icon.svg" alt="" width="44" height="44">
+                <div>
+                    <strong>Aldahim</strong>
+                    <span>Back-office</span>
+                </div>
+            </div>
+            <h2>Connexion</h2>
+            <p class="help">Saisissez le numéro lié à votre compte, puis le code OTP reçu.</p>
+
+            <form class="login-form" data-login-form>
+                <label class="field">
+                    <span>Téléphone</span>
+                    <input data-login-phone type="tel" inputmode="tel" autocomplete="tel" placeholder="+224 651 89 66 01" required>
+                </label>
+                <button class="primary-button" type="button" data-request-otp>Recevoir le code</button>
+
+                <label class="field" data-otp-field hidden>
+                    <span>Code OTP</span>
+                    <input data-login-otp type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="8" placeholder="000000">
+                </label>
+                <button class="primary-button" type="submit" data-login-submit hidden>Se connecter</button>
+                <p class="login-message" data-login-message role="status" aria-live="polite"></p>
+            </form>
+        </div>
+    </section>
+</body>
+</html>

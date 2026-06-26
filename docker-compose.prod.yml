@@ -16,7 +16,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`app.aldahim.com`)"
+      - "traefik.http.routers.app.rule=Host(`app.aldahim.com`) || Host(`bo.aldahim.com`)"
       - "traefik.http.routers.app.entrypoints=websecure"
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=80"
