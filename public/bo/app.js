@@ -4,7 +4,8 @@ const state = {
   providers: [],
   plans: [],
   deferredInstall: null,
-  otpRequested: false
+  otpRequested: false,
+  loginInProgress: false
 };
 
 const views = {
@@ -269,6 +270,12 @@ async function refresh() {
   renderPlans();
 }
 
+function showDashboardAfterLogin() {
+  updateAuthUi();
+  setView('overview');
+  $('[data-last-sync]').textContent = 'Synchronisation en cours...';
+}
+
 function updateOnlineState() {
   const online = navigator.onLine;
   $('[data-online-dot]').classList.toggle('online', online);
@@ -301,7 +308,11 @@ function registerServiceWorker() {
     return;
   }
 
-  navigator.serviceWorker.register('/service-worker.js');
+  navigator.serviceWorker.register('/service-worker.js').then((registration) => {
+    registration.update();
+  }).catch(() => {
+    // The PWA remains usable when service worker registration is unavailable.
+  });
 }
 
 function bindEvents() {
@@ -319,9 +330,20 @@ function bindEvents() {
   });
   $('[data-logout]').addEventListener('click', logout);
   $('[data-request-otp]').addEventListener('click', requestOtp);
+  $('[data-login-otp]').addEventListener('input', handleOtpInput);
   $('[data-login-form]').addEventListener('submit', login);
   window.addEventListener('online', updateOnlineState);
   window.addEventListener('offline', updateOnlineState);
+}
+
+function handleOtpInput(event) {
+  const input = event.currentTarget;
+  const digits = input.value.replace(/\D/g, '').slice(0, 8);
+  input.value = digits;
+
+  if (digits.length >= 6 && !state.loginInProgress) {
+    $('[data-login-form]').requestSubmit();
+  }
 }
 
 async function requestOtp() {
@@ -347,13 +369,18 @@ async function requestOtp() {
 
 async function login(event) {
   event.preventDefault();
+  if (state.loginInProgress) {
+    return;
+  }
+
   const phone = $('[data-login-phone]').value.trim();
-  const otp = $('[data-login-otp]').value.trim();
+  const otp = $('[data-login-otp]').value.replace(/\D/g, '');
   if (!phone || !otp) {
     setLoginMessage('Téléphone et code OTP sont requis.', true);
     return;
   }
 
+  state.loginInProgress = true;
   setLoginMessage('Vérification du code...');
   $('[data-login-submit]').disabled = true;
 
@@ -365,11 +392,12 @@ async function login(event) {
 
     setAuthenticated(data.token, data.user || null);
     setLoginMessage('');
-    await refresh();
-    setView('overview');
+    showDashboardAfterLogin();
+    window.location.replace(`/?signedIn=${Date.now()}`);
   } catch (error) {
     setLoginMessage(loginErrorMessage(error), true);
   } finally {
+    state.loginInProgress = false;
     $('[data-login-submit]').disabled = false;
   }
 }

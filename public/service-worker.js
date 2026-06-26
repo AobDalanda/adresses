@@ -1,10 +1,10 @@
-const CACHE_NAME = 'aldahim-bo-v2';
+const CACHE_NAME = 'aldahim-bo-v5';
 const APP_SHELL = [
   '/',
-  '/manifest.webmanifest',
-  '/bo/app.js',
-  '/bo/styles.css',
-  '/bo/icon.svg'
+  '/manifest.webmanifest?v=5',
+  '/bo/app.js?v=5',
+  '/bo/styles.css?v=5',
+  '/bo/icon.svg?v=5'
 ];
 
 self.addEventListener('install', (event) => {
