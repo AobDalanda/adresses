@@ -38,7 +38,7 @@ class WhatsAppOtpClient
 
         $payload = json_encode([
             'number' => $number,
-            'text' => sprintf('Votre code OTP Adressage est : %s. Ce code expire dans 5 minutes.', $otp),
+            'text' => $this->buildOtpMessage($otp),
             'delay' => $this->delayMs,
             'linkPreview' => false,
         ], JSON_THROW_ON_ERROR);
@@ -57,6 +57,14 @@ class WhatsAppOtpClient
     private function normalizePhone(string $phone): string
     {
         return PhoneNumberNormalizer::normalize($phone);
+    }
+
+    private function buildOtpMessage(string $otp): string
+    {
+        return sprintf(
+            "🔐 Votre code de vérification OTP Aldahim  est : %s.\n\nCe code est valide pendant 5 minutes.\n\nPour votre sécurité, ne le partagez avec personne. Si vous n'avez pas demandé ce code, ignorez simplement ce message.",
+            $otp
+        );
     }
 
     /**
