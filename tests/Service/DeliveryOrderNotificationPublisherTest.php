@@ -83,12 +83,14 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
             ->method('send')
             ->with(
                 self::callback(static fn (string $token): bool => in_array($token, ['token-1', 'token-2'], true)),
-                'Nouvelle livraison',
-                'Une nouvelle livraison est disponible.',
+                'Nouvelle livraison - 1 500 GNF',
+                'Maison -> Bureau · 8,4 km',
                 self::callback(static fn (array $data): bool =>
                     $data['type'] === 'delivery_order.created'
                     && $data['deliveryId'] === '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b'
                     && $data['status'] === 'QUOTED'
+                    && $data['notificationIcon'] === 'ic_stat_delivery'
+                    && $data['notificationColor'] === '#0F766E'
                     && is_string($data['notificationId'] ?? null)
                 ),
             );
@@ -156,6 +158,47 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         self::assertTrue($this->hasStatement($executedStatements, 'INSERT INTO outbox_event'));
         self::assertTrue($this->hasStatement($executedStatements, 'INSERT INTO user_notification'));
         self::assertTrue($this->hasStatement($executedStatements, 'push_status = :status'));
+    }
+
+    public function testDisablesStaleFcmTokenAfterPermanentFailure(): void
+    {
+        $hub = $this->createMock(HubInterface::class);
+        $hub->method('publish')->willReturn('event-id');
+
+        $executedStatements = [];
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')
+            ->willReturn([['user_id' => 43, 'token' => 'stale-token']]);
+        $db->method('executeStatement')
+            ->willReturnCallback(
+                static function (string $sql, array $params = []) use (&$executedStatements): int {
+                    $executedStatements[] = [$sql, $params];
+
+                    return 1;
+                }
+            );
+
+        $push = $this->createMock(PushClientInterface::class);
+        $push->method('send')
+            ->willThrowException(new \RuntimeException('FCM send failed: Requested entity was not found.'));
+
+        $publisher = new DeliveryOrderNotificationPublisher($hub, new NullLogger(), $db, $push);
+
+        self::assertTrue($publisher->publishNewDeliveryOrder([
+            'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
+            'status' => 'QUOTED',
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
+            'pricing' => [
+                'distanceKm' => 8.4,
+                'durationMinutes' => 26,
+                'totalAmount' => 1500,
+                'currency' => 'GNF',
+            ],
+        ]));
+
+        self::assertTrue($this->hasStatement($executedStatements, 'UPDATE user_push_device'));
+        self::assertTrue($this->hasStatement($executedStatements, 'token_hash = :tokenHash'));
     }
 
     /**

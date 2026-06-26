@@ -33,11 +33,30 @@ final class FcmPushClient implements PushClientInterface
             ->withNotification(Notification::create($title, $body))
             ->withData($data);
 
+        $androidConfig = [];
         $collapseKey = $data['collapseKey'] ?? null;
         if (is_string($collapseKey) && $collapseKey !== '') {
-            $message = $message
-                ->withAndroidConfig(['collapse_key' => $collapseKey])
-                ->withApnsConfig(['headers' => ['apns-collapse-id' => $collapseKey]]);
+            $androidConfig['collapse_key'] = $collapseKey;
+            $message = $message->withApnsConfig(['headers' => ['apns-collapse-id' => $collapseKey]]);
+        }
+
+        $androidNotification = [];
+        $icon = $data['notificationIcon'] ?? null;
+        if (is_string($icon) && preg_match('/^[a-z][a-z0-9_]*$/', $icon) === 1) {
+            $androidNotification['icon'] = $icon;
+        }
+
+        $color = $data['notificationColor'] ?? null;
+        if (is_string($color) && preg_match('/^#[0-9A-Fa-f]{6}$/', $color) === 1) {
+            $androidNotification['color'] = strtoupper($color);
+        }
+
+        if ($androidNotification !== []) {
+            $androidConfig['notification'] = $androidNotification;
+        }
+
+        if ($androidConfig !== []) {
+            $message = $message->withAndroidConfig($androidConfig);
         }
 
         try {

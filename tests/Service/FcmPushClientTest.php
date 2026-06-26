@@ -24,6 +24,8 @@ final class FcmPushClientTest extends TestCase
                     && ($payload['notification']['body'] ?? null) === 'Une nouvelle livraison est disponible.'
                     && ($payload['data']['type'] ?? null) === 'delivery_order.created'
                     && ($payload['android']['collapse_key'] ?? null) === 'delivery_order.delivery-id'
+                    && ($payload['android']['notification']['icon'] ?? null) === 'ic_stat_delivery'
+                    && ($payload['android']['notification']['color'] ?? null) === '#0F766E'
                     && ($payload['apns']['headers']['apns-collapse-id'] ?? null) === 'delivery_order.delivery-id';
             }));
 
@@ -34,6 +36,8 @@ final class FcmPushClientTest extends TestCase
             [
                 'type' => 'delivery_order.created',
                 'collapseKey' => 'delivery_order.delivery-id',
+                'notificationIcon' => 'ic_stat_delivery',
+                'notificationColor' => '#0F766E',
             ],
         );
     }

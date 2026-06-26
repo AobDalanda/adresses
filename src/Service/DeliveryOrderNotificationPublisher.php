@@ -15,6 +15,8 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     private const NOTIFICATION_TYPE = 'delivery_order.created';
     private const NOTIFICATION_TITLE = 'Nouvelle livraison';
     private const NOTIFICATION_BODY = 'Une nouvelle livraison est disponible.';
+    private const NOTIFICATION_ICON = 'ic_stat_delivery';
+    private const NOTIFICATION_COLOR = '#0F766E';
 
     public function __construct(
         private HubInterface $hub,
@@ -199,6 +201,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     private function persistNotification(string $sourceEventId, int $userId, array $payload): ?string
     {
         $notificationId = Uuid::v7()->toRfc4122();
+        $content = $this->buildNotificationContent($payload);
         $inserted = $this->db->executeStatement(
             <<<'SQL'
                 INSERT INTO user_notification (
@@ -216,8 +219,8 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                 'userId' => $userId,
                 'sourceEventId' => $sourceEventId,
                 'type' => self::NOTIFICATION_TYPE,
-                'title' => self::NOTIFICATION_TITLE,
-                'body' => self::NOTIFICATION_BODY,
+                'title' => $content['title'],
+                'body' => $content['body'],
                 'data' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
             ],
         );
@@ -234,6 +237,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     {
         $sent = 0;
         $errors = [];
+        $content = $this->buildNotificationContent($payload);
         $data = [
             'type' => self::NOTIFICATION_TYPE,
             'notificationId' => $notificationId,
@@ -241,19 +245,25 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             'status' => (string) ($payload['delivery']['status'] ?? ''),
             'collapseKey' => 'delivery_order.' . (string) ($payload['delivery']['id'] ?? ''),
             'notificationGroup' => 'delivery_order',
+            'notificationIcon' => self::NOTIFICATION_ICON,
+            'notificationColor' => self::NOTIFICATION_COLOR,
         ];
 
         foreach ($tokens as $token) {
             try {
                 $this->push->send(
                     (string) $token,
-                    self::NOTIFICATION_TITLE,
-                    self::NOTIFICATION_BODY,
+                    $content['title'],
+                    $content['body'],
                     $data,
                 );
                 ++$sent;
             } catch (\Throwable $exception) {
                 $errors[] = $exception->getMessage();
+                if ($this->isPermanentPushTokenFailure($exception)) {
+                    $this->disablePushDeviceToken((string) $token, $exception->getMessage());
+                }
+
                 $this->logger->warning('Driver FCM new delivery notification failed', [
                     'deliveryId' => $payload['delivery']['id'] ?? null,
                     'exception' => $exception,
@@ -266,6 +276,104 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             'failed' => count($errors),
             'error' => $errors === [] ? null : mb_substr(implode(' | ', $errors), 0, 4000),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array{title: string, body: string}
+     */
+    private function buildNotificationContent(array $payload): array
+    {
+        $delivery = is_array($payload['delivery'] ?? null) ? $payload['delivery'] : [];
+        $pricing = is_array($delivery['pricing'] ?? null) ? $delivery['pricing'] : [];
+
+        $amount = $this->formatAmount($pricing['totalAmount'] ?? null, $pricing['currency'] ?? null);
+        $distance = $this->formatDistance($pricing['distanceKm'] ?? null);
+        $pickup = $this->addressLabel($delivery['pickupAddress'] ?? null, 'Départ');
+        $dropoff = $this->addressLabel($delivery['dropoffAddress'] ?? null, 'Destination');
+
+        $title = $amount === null
+            ? self::NOTIFICATION_TITLE
+            : sprintf('%s - %s', self::NOTIFICATION_TITLE, $amount);
+
+        $parts = [];
+        if ($pickup !== null || $dropoff !== null) {
+            $parts[] = sprintf('%s -> %s', $pickup ?? 'Départ', $dropoff ?? 'Destination');
+        }
+
+        if ($distance !== null) {
+            $parts[] = $distance;
+        }
+
+        return [
+            'title' => $title,
+            'body' => $parts === [] ? self::NOTIFICATION_BODY : implode(' · ', $parts),
+        ];
+    }
+
+    private function formatAmount(mixed $amount, mixed $currency): ?string
+    {
+        if (!is_int($amount) && !is_float($amount) && !is_numeric($amount)) {
+            return null;
+        }
+
+        $normalizedCurrency = is_string($currency) && $currency !== '' ? strtoupper($currency) : 'GNF';
+        $formattedAmount = number_format((float) $amount, 0, ',', ' ');
+
+        return sprintf('%s %s', $formattedAmount, $normalizedCurrency);
+    }
+
+    private function formatDistance(mixed $distanceKm): ?string
+    {
+        if (!is_int($distanceKm) && !is_float($distanceKm) && !is_numeric($distanceKm)) {
+            return null;
+        }
+
+        return sprintf('%s km', number_format((float) $distanceKm, 1, ',', ' '));
+    }
+
+    private function addressLabel(mixed $address, string $fallback): ?string
+    {
+        if (!is_array($address)) {
+            return null;
+        }
+
+        $label = $address['displayLabel'] ?? null;
+        if (!is_string($label) || trim($label) === '') {
+            return $fallback;
+        }
+
+        return mb_substr(trim($label), 0, 80);
+    }
+
+    private function isPermanentPushTokenFailure(\Throwable $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'requested entity was not found')
+            || str_contains($message, 'token not found')
+            || str_contains($message, 'registration token is not registered')
+            || str_contains($message, 'registration-token-not-registered')
+            || str_contains($message, 'unregistered');
+    }
+
+    private function disablePushDeviceToken(string $token, string $reason): void
+    {
+        $this->db->executeStatement(
+            <<<'SQL'
+                UPDATE user_push_device
+                SET enabled = FALSE,
+                    updated_at = now()
+                WHERE token_hash = :tokenHash
+                  AND enabled = TRUE
+                SQL,
+            ['tokenHash' => hash('sha256', $token)],
+        );
+
+        $this->logger->info('Disabled stale FCM push token after permanent failure', [
+            'tokenHashPrefix' => substr(hash('sha256', $token), 0, 12),
+            'reason' => mb_substr($reason, 0, 240),
+        ]);
     }
 
     private function setPushResult(string $notificationId, string $status, int $attempts, ?string $error): void
