@@ -1,5 +1,10 @@
 FROM dunglas/frankenphp:1.4-php8.4
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system http.version HTTP/1.1
+
 RUN install-php-extensions \
     pdo_pgsql \
     pgsql \
@@ -10,7 +15,7 @@ RUN install-php-extensions \
     bcmath \
     sockets
 
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.10 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
@@ -19,6 +24,7 @@ COPY . .
 COPY Caddyfile /etc/caddy/Caddyfile
 
 RUN set -eu; \
+    composer config --global source-fallback true; \
     attempt=1; \
     until COMPOSER_MAX_PARALLEL_HTTP=1 composer install \
         --no-dev \
