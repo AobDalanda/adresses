@@ -18,11 +18,21 @@ COPY . .
 
 COPY Caddyfile /etc/caddy/Caddyfile
 
-RUN composer install \
-    --no-dev \
-    --no-scripts \
-    --optimize-autoloader \
-    --no-interaction
+RUN set -eu; \
+    attempt=1; \
+    until COMPOSER_MAX_PARALLEL_HTTP=1 composer install \
+        --no-dev \
+        --no-scripts \
+        --optimize-autoloader \
+        --no-interaction; \
+    do \
+        if [ "$attempt" -ge 3 ]; then \
+            exit 1; \
+        fi; \
+        attempt=$((attempt + 1)); \
+        echo "Composer download failed, retrying ($attempt/3)..."; \
+        sleep 2; \
+    done
 
 RUN mkdir -p var/cache var/log
 
