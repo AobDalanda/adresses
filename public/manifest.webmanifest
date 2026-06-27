@@ -2,8 +2,8 @@
   "name": "Aldahim Back-office",
   "short_name": "Aldahim BO",
   "description": "Console back-office installable pour l'administration Aldahim.",
-  "id": "/",
-  "start_url": "/",
+  "id": "/?pwa=aldahim-bo",
+  "start_url": "/?pwa=aldahim-bo&v=7",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -12,7 +12,7 @@
   "categories": ["business", "productivity"],
   "icons": [
     {
-      "src": "/bo/icon.svg",
+      "src": "/bo/icon.svg?v=7",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
@@ -22,10 +22,10 @@
     {
       "name": "Prestataires",
       "short_name": "Prestataires",
-      "url": "/providers",
+      "url": "/providers?pwa=aldahim-bo&v=7",
       "icons": [
         {
-          "src": "/bo/icon.svg",
+          "src": "/bo/icon.svg?v=7",
           "sizes": "any",
           "type": "image/svg+xml"
         }

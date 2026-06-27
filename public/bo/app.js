@@ -1,11 +1,12 @@
 const state = {
-  token: localStorage.getItem('aldahim.bo.jwt') || '',
+  token: loadStoredToken(),
   user: loadStoredUser(),
   providers: [],
   plans: [],
   deferredInstall: null,
   otpRequested: false,
-  loginInProgress: false
+  loginInProgress: false,
+  reloadedForVersion: wasReloadedForVersion()
 };
 
 const views = {
@@ -29,6 +30,22 @@ const views = {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+function loadStoredToken() {
+  try {
+    return localStorage.getItem('aldahim.bo.jwt') || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function wasReloadedForVersion() {
+  try {
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '7';
+  } catch (error) {
+    return false;
+  }
+}
 
 function loadStoredUser() {
   try {
@@ -109,8 +126,12 @@ function setView(name) {
 function setAuthenticated(token, user) {
   state.token = token;
   state.user = user || null;
-  localStorage.setItem('aldahim.bo.jwt', token);
-  localStorage.setItem('aldahim.bo.user', JSON.stringify(state.user));
+  try {
+    localStorage.setItem('aldahim.bo.jwt', token);
+    localStorage.setItem('aldahim.bo.user', JSON.stringify(state.user));
+  } catch (error) {
+    setLoginMessage('Session active pour cet onglet. Le stockage local est indisponible.', true);
+  }
   updateAuthUi();
 }
 
@@ -120,8 +141,12 @@ function logout() {
   state.providers = [];
   state.plans = [];
   state.otpRequested = false;
-  localStorage.removeItem('aldahim.bo.jwt');
-  localStorage.removeItem('aldahim.bo.user');
+  try {
+    localStorage.removeItem('aldahim.bo.jwt');
+    localStorage.removeItem('aldahim.bo.user');
+  } catch (error) {
+    // Ignore storage cleanup failures; in-memory state is already cleared.
+  }
   $('[data-login-phone]').value = '';
   $('[data-login-otp]').value = '';
   setLoginMessage('');
@@ -308,6 +333,20 @@ function registerServiceWorker() {
     return;
   }
 
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type !== 'PWA_VERSION_READY' || state.reloadedForVersion) {
+      return;
+    }
+
+    state.reloadedForVersion = true;
+    try {
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '7');
+    } catch (error) {
+      // Continue with the one-time reload even when session storage is unavailable.
+    }
+    window.location.replace('/?pwa=aldahim-bo&v=7');
+  });
+
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {
     registration.update();
   }).catch(() => {
@@ -393,7 +432,7 @@ async function login(event) {
     setAuthenticated(data.token, data.user || null);
     setLoginMessage('');
     showDashboardAfterLogin();
-    window.location.replace(`/?signedIn=${Date.now()}`);
+    refresh();
   } catch (error) {
     setLoginMessage(loginErrorMessage(error), true);
   } finally {
