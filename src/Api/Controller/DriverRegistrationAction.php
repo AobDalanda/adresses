@@ -60,7 +60,7 @@ final class DriverRegistrationAction
                         $input->fullName,
                         true,
                         null,
-                        'provider',
+                        'client',
                         $input->identityDocumentPath,
                         $input->driverLicense['photoPath'],
                         $input->email,

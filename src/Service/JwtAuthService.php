@@ -12,6 +12,7 @@ class JwtAuthService
     public function __construct(
         private JWTEncoderInterface $encoder,
         private UserAccountService $users,
+        private BackOfficeAccountService $backOfficeAccounts,
         private int $tokenTtlSeconds = 3600
     ) {
     }
@@ -67,6 +68,20 @@ class JwtAuthService
             }
 
             $currentTokenVersion = $this->users->findTokenVersionById((int) $payload['uid']);
+            if ($currentTokenVersion === null || $currentTokenVersion !== (int) $payload['tv']) {
+                return null;
+            }
+        }
+
+        if (in_array($payload['typ'] ?? null, ['back_office', 'back_office_refresh'], true)) {
+            if (
+                !isset($payload['uid'], $payload['tv'])
+                || ($payload['aud'] ?? null) !== 'bo.aldahim.com'
+            ) {
+                return null;
+            }
+
+            $currentTokenVersion = $this->backOfficeAccounts->findTokenVersion((int) $payload['uid']);
             if ($currentTokenVersion === null || $currentTokenVersion !== (int) $payload['tv']) {
                 return null;
             }

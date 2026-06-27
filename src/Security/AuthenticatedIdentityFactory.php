@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Security;
 
 use App\Repository\UserAccountRepository;
+use App\Service\BackOfficeAccountService;
+use App\Service\ProviderProfileService;
 
 class AuthenticatedIdentityFactory
 {
     public function __construct(
         private readonly UserAccountRepository $users,
-        private readonly UserRoleProvider $roleProvider
+        private readonly UserRoleProvider $roleProvider,
+        private readonly ProviderProfileService $providerProfiles,
+        private readonly BackOfficeAccountService $backOfficeAccounts
     ) {
     }
 
@@ -28,13 +32,35 @@ class AuthenticatedIdentityFactory
             return null;
         }
 
-        $roles = array_merge(['ROLE_USER'], $this->roleProvider->rolesForUser((int) $user->getId()));
-        if ($user->getAccountType() === 'provider') {
+        $roles = ['ROLE_USER'];
+        if ($this->providerProfiles->findByUserId((int) $user->getId()) !== null) {
             $roles[] = 'ROLE_PROVIDER';
-        } elseif ($user->getAccountType() === 'admin') {
-            $roles[] = 'ROLE_ADMIN';
         }
 
         return new AuthenticatedIdentity($user, 'mobile', array_values(array_unique($roles)), $claims);
+    }
+
+    /**
+     * @param array<string, mixed> $claims
+     */
+    public function fromBackOfficeClaims(array $claims): ?AuthenticatedIdentity
+    {
+        if (
+            ($claims['typ'] ?? null) !== 'back_office'
+            || ($claims['aud'] ?? null) !== 'bo.aldahim.com'
+            || !isset($claims['uid'])
+        ) {
+            return null;
+        }
+
+        $userId = (int) $claims['uid'];
+        $user = $this->users->find($userId);
+        if ($user === null || !$this->backOfficeAccounts->isEnabled($userId)) {
+            return null;
+        }
+
+        $roles = array_merge(['ROLE_BACK_OFFICE'], $this->roleProvider->rolesForUser($userId));
+
+        return new AuthenticatedIdentity($user, 'back_office', array_values(array_unique($roles)), $claims);
     }
 }

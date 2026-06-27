@@ -86,9 +86,9 @@ class ProviderLegacyDiagnosticService
                 LIMIT :limit
                 SQL,
         ],
-        'PROFILE_ACCOUNT_TYPE_MISMATCH' => [
+        'PROFILE_ATTACHED_TO_ADMIN_ACCOUNT' => [
             'severity' => 'critical',
-            'description' => 'Profil prestataire rattache a un compte qui n est pas de type provider.',
+            'description' => 'Profil prestataire rattache a une identite administrative historique.',
             'sql' => <<<'SQL'
                 SELECT
                     profile.id AS profile_id,
@@ -98,7 +98,7 @@ class ProviderLegacyDiagnosticService
                     COUNT(*) OVER() AS issue_total
                 FROM provider_profile profile
                 JOIN user_account account ON account.id = profile.user_id
-                WHERE account.account_type <> 'provider'
+                WHERE account.account_type = 'admin'
                 ORDER BY profile.id
                 LIMIT :limit
                 SQL,

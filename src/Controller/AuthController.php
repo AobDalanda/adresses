@@ -94,7 +94,7 @@ class AuthController extends AbstractController
             $resolvedName,
             true,
             $registration['profilePhotoPath'] ?? null,
-            $legacyAccountType === 'client' ? 'client' : 'provider',
+            'client',
             $registration['identityDocumentPath'] ?? null,
             $registration['driverLicensePath'] ?? null
         );

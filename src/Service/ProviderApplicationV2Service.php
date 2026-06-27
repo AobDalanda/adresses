@@ -448,14 +448,12 @@ class ProviderApplicationV2Service
         if ($accountType === false) {
             throw new \DomainException('Utilisateur introuvable.', 404);
         }
-        if ($accountType === 'admin') {
+        if ($accountType === 'admin' || (bool) $this->db->fetchOne(
+            'SELECT EXISTS(SELECT 1 FROM back_office_account WHERE user_id = :userId AND enabled = TRUE)',
+            ['userId' => $userId],
+        )) {
             throw new \DomainException('Un administrateur ne peut pas creer une candidature prestataire.', 403);
         }
-
-        $this->db->executeStatement(
-            "UPDATE user_account SET account_type = 'provider' WHERE id = :userId",
-            ['userId' => $userId],
-        );
 
         return (int) $this->db->fetchOne(
             <<<'SQL'

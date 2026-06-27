@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Security\UserRoleProvider;
+use App\Service\BackOfficeAccountService;
 use App\Service\JwtAuthService;
 use App\Service\OtpService;
 use App\Service\UserAccountAssetUrlResolver;
@@ -28,6 +29,7 @@ final class BackOfficeAuthController extends AbstractController
     public function __construct(
         private readonly OtpService $otpService,
         private readonly UserAccountService $users,
+        private readonly BackOfficeAccountService $backOfficeAccounts,
         private readonly JwtAuthService $jwt,
         private readonly UserRoleProvider $roles,
         private readonly UserAccountAssetUrlResolver $assetUrlResolver
@@ -52,7 +54,7 @@ final class BackOfficeAuthController extends AbstractController
         }
 
         try {
-            $this->otpService->requestOtp($phone);
+            $this->otpService->requestOtp($phone, OtpService::PURPOSE_BACK_OFFICE_AUTH);
         } catch (\Throwable) {
             return $this->json(['message' => 'Erreur lors de l’envoi OTP'], 500);
         }
@@ -79,7 +81,7 @@ final class BackOfficeAuthController extends AbstractController
             return $this->json(['message' => 'phone est invalide'], 400);
         }
 
-        if (!$this->otpService->verifyOtp($phone, $otp)) {
+        if (!$this->otpService->verifyOtp($phone, $otp, OtpService::PURPOSE_BACK_OFFICE_AUTH)) {
             return $this->json(['message' => 'OTP invalide'], 401);
         }
 
@@ -92,10 +94,11 @@ final class BackOfficeAuthController extends AbstractController
             return $this->json(['message' => 'BACK_OFFICE_FORBIDDEN'], 403);
         }
 
-        $tokenVersion = $this->users->rotateTokenVersion((int) $user['id']);
+        $tokenVersion = $this->backOfficeAccounts->rotateTokenVersion((int) $user['id']);
         $token = $this->jwt->issueToken([
             'sub' => $phone,
-            'typ' => 'mobile',
+            'typ' => 'back_office',
+            'aud' => 'bo.aldahim.com',
             'uid' => $user['id'],
             'tv' => $tokenVersion,
         ]);
@@ -104,7 +107,8 @@ final class BackOfficeAuthController extends AbstractController
             'token' => $token,
             'refreshToken' => $this->jwt->issueToken([
                 'sub' => $phone,
-                'typ' => 'mobile_refresh',
+                'typ' => 'back_office_refresh',
+                'aud' => 'bo.aldahim.com',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
@@ -150,11 +154,12 @@ final class BackOfficeAuthController extends AbstractController
      */
     private function canAccessBackOffice(array $user): bool
     {
-        if (($user['accountType'] ?? null) === 'admin') {
-            return true;
+        $userId = (int) $user['id'];
+        if (!$this->backOfficeAccounts->isEnabled($userId)) {
+            return false;
         }
 
-        $roles = $this->roles->rolesForUser((int) $user['id']);
+        $roles = $this->roles->rolesForUser($userId);
 
         return array_intersect(self::BACK_OFFICE_ROLES, $roles) !== [];
     }

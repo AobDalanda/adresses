@@ -4,8 +4,10 @@ namespace App\Service;
 
 class UserAccountAssetUrlResolver
 {
-    public function __construct(private SupabaseStorageClient $storage)
-    {
+    public function __construct(
+        private SupabaseStorageClient $storage,
+        private UserCapabilityService $capabilities
+    ) {
     }
 
     /**
@@ -14,6 +16,17 @@ class UserAccountAssetUrlResolver
      */
     public function enrich(array $user): array
     {
+        if (isset($user['id'])) {
+            $userId = (int) $user['id'];
+            $storedAccountType = is_string($user['accountType'] ?? null) ? $user['accountType'] : 'client';
+            $capabilities = $this->capabilities->forUser($userId);
+            $user['capabilities'] = $capabilities;
+            // Kept for deployed mobile clients; new clients should use capabilities.provider.
+            $user['accountType'] = $storedAccountType === 'admin'
+                ? 'admin'
+                : ($capabilities['provider'] ? 'provider' : 'client');
+        }
+
         $profilePhotoUrl = $this->resolvePublicUrl($this->stringOrNull($user['profilePhotoPath'] ?? null));
 
         $user['profilePhotoUrl'] = $profilePhotoUrl;

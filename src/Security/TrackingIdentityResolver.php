@@ -26,9 +26,7 @@ final readonly class TrackingIdentityResolver
         $userId = $identity->getUserId();
         $roles = $identity->getRoles();
 
-        $providerProfile = $user->getAccountType() === 'provider'
-            ? $this->providerProfiles->findByUserId($userId)
-            : null;
+        $providerProfile = $this->providerProfiles->findByUserId($userId);
 
         return new TrackingIdentity(
             $userId,

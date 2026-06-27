@@ -24,6 +24,7 @@ class UserAccountService
     ): int
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
+        $accountType = $this->storageAccountType($accountType);
         $normalizedEmail = $this->normalizeEmail($email);
         $normalizedIdentityDocumentNumber = $this->normalizeIdentityDocumentNumber($identityDocumentNumber);
 
@@ -37,7 +38,7 @@ class UserAccountService
                     email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
                     account_type = CASE
-                        WHEN user_account.account_type IN ('provider', 'admin') AND EXCLUDED.account_type = 'client'
+                        WHEN user_account.account_type = 'admin' AND EXCLUDED.account_type = 'client'
                             THEN user_account.account_type
                         ELSE COALESCE(EXCLUDED.account_type, user_account.account_type)
                     END,
@@ -75,6 +76,7 @@ class UserAccountService
     ): array
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
+        $accountType = $this->storageAccountType($accountType);
         $normalizedName = is_string($name) ? trim($name) : null;
         if ($normalizedName === '') {
             $normalizedName = null;
@@ -92,7 +94,7 @@ class UserAccountService
                     email = COALESCE(EXCLUDED.email, user_account.email),
                     profile_photo_path = COALESCE(EXCLUDED.profile_photo_path, user_account.profile_photo_path),
                     account_type = CASE
-                        WHEN user_account.account_type IN ('provider', 'admin') AND EXCLUDED.account_type = 'client'
+                        WHEN user_account.account_type = 'admin' AND EXCLUDED.account_type = 'client'
                             THEN user_account.account_type
                         ELSE COALESCE(EXCLUDED.account_type, user_account.account_type)
                     END,
@@ -328,6 +330,7 @@ class UserAccountService
     ): array
     {
         $phone = PhoneNumberNormalizer::normalize($phone);
+        $accountType = $this->storageAccountType($accountType);
         $normalizedEmail = $this->normalizeEmail($email);
         $normalizedIdentityDocumentNumber = $this->normalizeIdentityDocumentNumber($identityDocumentNumber);
 
@@ -444,5 +447,10 @@ class UserAccountService
         $normalized = trim(preg_replace('/\s+/', ' ', $identityDocumentNumber) ?? $identityDocumentNumber);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function storageAccountType(string $accountType): string
+    {
+        return $accountType === 'admin' ? 'admin' : 'client';
     }
 }

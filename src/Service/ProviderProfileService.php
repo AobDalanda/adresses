@@ -45,14 +45,12 @@ final class ProviderProfileService
             if ($accountType === false) {
                 throw new \RuntimeException('Utilisateur introuvable');
             }
-            if ($accountType === 'admin') {
+            if ($accountType === 'admin' || (bool) $this->db->fetchOne(
+                'SELECT EXISTS(SELECT 1 FROM back_office_account WHERE user_id = :userId AND enabled = TRUE)',
+                ['userId' => $userId]
+            )) {
                 throw new \DomainException('Un compte administrateur ne peut pas devenir prestataire');
             }
-
-            $this->db->executeStatement(
-                "UPDATE user_account SET account_type = 'provider' WHERE id = :userId",
-                ['userId' => $userId]
-            );
             $this->db->executeStatement(
                 <<<'SQL'
                 INSERT INTO provider_profile (
@@ -201,7 +199,15 @@ final class ProviderProfileService
                 'name' => $row['name'] !== null ? (string) $row['name'] : null,
                 'email' => $row['email'] !== null ? (string) $row['email'] : null,
                 'verified' => $this->toBoolean($row['verified']),
-                'accountType' => (string) $row['account_type'],
+                // Compatibility field for mobile clients deployed before capabilities.
+                'accountType' => 'provider',
+            ],
+            'capabilities' => [
+                'client' => true,
+                'provider' => true,
+                'providerStatus' => (string) $row['validation_status'],
+                'canDeliver' => $this->toBoolean($row['can_deliver']),
+                'canTransportPeople' => $this->toBoolean($row['can_transport_people']),
             ],
         ];
     }

@@ -33,13 +33,17 @@ final class MobileJwtAuthenticator extends AbstractAuthenticator
     public function authenticate(Request $request): Passport
     {
         $claims = $this->jwt->decodeFromRequest($request);
-        if (!is_array($claims) || ($claims['typ'] ?? null) !== 'mobile' || !isset($claims['uid'])) {
-            throw new BadCredentialsException('JWT mobile invalide.');
+        if (!is_array($claims) || !isset($claims['uid'])) {
+            throw new BadCredentialsException('JWT invalide.');
         }
 
-        $identity = $this->identities->fromMobileClaims($claims);
+        $identity = match ($claims['typ'] ?? null) {
+            'mobile' => $this->identities->fromMobileClaims($claims),
+            'back_office' => $this->identities->fromBackOfficeClaims($claims),
+            default => null,
+        };
         if ($identity === null) {
-            throw new BadCredentialsException('Identite mobile introuvable.');
+            throw new BadCredentialsException('Identite introuvable.');
         }
 
         return new SelfValidatingPassport(

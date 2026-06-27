@@ -16,7 +16,7 @@ class UsageCounter
     #[ORM\Column(type: 'bigint')]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: UserAccount::class)]
+    #[ORM\ManyToOne(targetEntity: UserAccount::class, inversedBy: 'usageCounters')]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private UserAccount $user;
 

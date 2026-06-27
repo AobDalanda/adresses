@@ -163,18 +163,15 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             <<<'SQL'
                 SELECT DISTINCT account.id AS user_id, device.token
                 FROM user_account account
-                LEFT JOIN provider_profile profile ON profile.user_id = account.id
+                JOIN provider_profile profile ON profile.user_id = account.id
+                JOIN provider_authorization authorization
+                    ON authorization.provider_profile_id = profile.id
+                   AND authorization.status = 'ACTIVE'
                 LEFT JOIN user_push_device device
                     ON device.user_id = account.id
                    AND device.enabled = TRUE
-                WHERE (
-                    LOWER(account.account_type) IN ('livreur', 'driver')
-                    OR (
-                        LOWER(account.account_type) = 'provider'
-                        AND profile.can_deliver = TRUE
-                        AND profile.validation_status = 'approved'
-                    )
-                  )
+                WHERE profile.can_deliver = TRUE
+                  AND profile.validation_status = 'approved'
                 SQL,
         );
 

@@ -60,7 +60,7 @@ final class UserAccountRegisterVerifyAction
             $registration['fullName'],
             true,
             $registration['profilePhotoPath'] ?? null,
-            $legacyAccountType === 'client' ? 'client' : 'provider',
+            'client',
             $registration['identityDocumentPath'] ?? null,
             $registration['driverLicensePath'] ?? null,
             $registration['email'] ?? null,

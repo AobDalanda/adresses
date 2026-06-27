@@ -25,12 +25,6 @@ final readonly class TrackingIdentity
 
     public function isDriver(): bool
     {
-        if (in_array(strtolower($this->accountType), ['driver', 'livreur'], true)) {
-            return true;
-        }
-
-        return strtolower($this->accountType) === 'provider'
-            && $this->canDeliver
-            && $this->providerApproved;
+        return $this->canDeliver && $this->providerApproved;
     }
 }

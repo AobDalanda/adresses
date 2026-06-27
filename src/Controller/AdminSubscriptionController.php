@@ -7,10 +7,10 @@ use App\Enum\PaymentProvider;
 use App\Enum\UserSubscriptionStatus;
 use App\Repository\SubscriptionPlanRepository;
 use App\Repository\UserSubscriptionRepository;
-use App\Service\JwtAuthService;
 use App\Service\Subscription\SubscriptionManager;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -19,7 +19,7 @@ use Symfony\Component\Routing\Attribute\Route;
 final class AdminSubscriptionController extends AbstractController
 {
     public function __construct(
-        private readonly JwtAuthService $jwt,
+        private readonly Security $security,
         private readonly SubscriptionManager $subscriptions,
         private readonly UserSubscriptionRepository $userSubscriptions,
         private readonly SubscriptionPlanRepository $plans,
@@ -204,13 +204,6 @@ final class AdminSubscriptionController extends AbstractController
 
     private function isAdmin(Request $request): bool
     {
-        $auth = $this->jwt->decodeFromRequest($request);
-        if (!is_array($auth)) {
-            return false;
-        }
-
-        $roles = $auth['roles'] ?? [];
-
-        return is_array($roles) && in_array('ROLE_ADMIN', $roles, true);
+        return $this->security->isGranted('ROLE_ADMIN');
     }
 }

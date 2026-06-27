@@ -41,7 +41,7 @@ function loadStoredToken() {
 
 function wasReloadedForVersion() {
   try {
-    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '7';
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '8';
   } catch (error) {
     return false;
   }
@@ -284,10 +284,14 @@ async function refresh() {
     $('[data-last-sync]').textContent = `Synchronisé à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     $('[data-auth-notice]').hidden = true;
   } catch (error) {
+    if (error.message === 'FORBIDDEN') {
+      logout();
+      setLoginMessage('Votre ancienne session a expiré. Reconnectez-vous.', true);
+      return;
+    }
+
     $('[data-auth-notice]').hidden = false;
-    $('[data-auth-notice] span').textContent = error.message === 'FORBIDDEN'
-      ? 'Le jeton est absent, expiré ou ne possède pas les droits back-office.'
-      : 'Impossible de charger les données pour le moment.';
+    $('[data-auth-notice] span').textContent = 'Impossible de charger les données pour le moment.';
   }
 
   renderMetrics();
@@ -340,11 +344,11 @@ function registerServiceWorker() {
 
     state.reloadedForVersion = true;
     try {
-      sessionStorage.setItem('aldahim.bo.versionReloaded', '7');
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '8');
     } catch (error) {
       // Continue with the one-time reload even when session storage is unavailable.
     }
-    window.location.replace('/?pwa=aldahim-bo&v=7');
+    window.location.replace('/?pwa=aldahim-bo&v=8');
   });
 
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {

@@ -34,10 +34,6 @@ final class ProviderApprovalStatusService
         if ($user === false) {
             throw new \RuntimeException('Utilisateur introuvable');
         }
-        if ((string) $user['account_type'] !== 'provider') {
-            throw new \RuntimeException('Profil prestataire introuvable');
-        }
-
         $profile = $this->db->fetchAssociative(
             <<<'SQL'
                 SELECT id, validation_status, created_at, updated_at
@@ -47,6 +43,9 @@ final class ProviderApprovalStatusService
                 SQL,
             ['userId' => $userId],
         );
+        if ($profile === false) {
+            throw new \RuntimeException('Profil prestataire introuvable');
+        }
 
         $application = $profile === false ? false : $this->db->fetchAssociative(
             <<<'SQL'
@@ -114,7 +113,7 @@ final class ProviderApprovalStatusService
             'account' => [
                 'phone' => (string) $user['phone'],
                 'verified' => $this->toBoolean($user['verified']),
-                'accountType' => (string) $user['account_type'],
+                'accountType' => 'provider',
             ],
             'documents' => $documents,
             'checks' => [

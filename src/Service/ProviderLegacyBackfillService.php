@@ -122,8 +122,7 @@ class ProviderLegacyBackfillService
                 FROM provider_profile profile
                 JOIN user_account account ON account.id = profile.user_id
                 LEFT JOIN driver_application application ON application.user_id = profile.user_id
-                WHERE account.account_type = 'provider'
-                  AND NOT EXISTS (
+                WHERE NOT EXISTS (
                       SELECT 1
                       FROM provider_application canonical
                       WHERE canonical.provider_profile_id = profile.id
@@ -372,7 +371,7 @@ class ProviderLegacyBackfillService
         $row = $this->db->fetchAssociative(
             <<<'SQL'
                 SELECT
-                    COUNT(DISTINCT id) FILTER (WHERE account_type <> 'provider') AS account_type_mismatch,
+                    0 AS account_type_mismatch,
                     COUNT(DISTINCT id) FILTER (
                         WHERE application_count > 1
                     ) AS multiple_applications,
@@ -393,7 +392,6 @@ class ProviderLegacyBackfillService
                         profile.validation_status AS profile_status,
                         profile.can_deliver,
                         profile.can_transport_people,
-                        account.account_type,
                         COUNT(application.id) OVER (PARTITION BY profile.id) AS application_count,
                         application.status AS application_status,
                         application.signup_as
@@ -425,8 +423,7 @@ class ProviderLegacyBackfillService
                 FROM provider_profile profile
                 JOIN user_account account ON account.id = profile.user_id
                 LEFT JOIN driver_application application ON application.user_id = profile.user_id
-                WHERE account.account_type = 'provider'
-                  AND NOT EXISTS (
+                WHERE NOT EXISTS (
                       SELECT 1
                       FROM provider_application canonical
                       WHERE canonical.provider_profile_id = profile.id
