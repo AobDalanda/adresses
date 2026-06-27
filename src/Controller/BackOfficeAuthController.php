@@ -81,10 +81,6 @@ final class BackOfficeAuthController extends AbstractController
             return $this->json(['message' => 'phone est invalide'], 400);
         }
 
-        if (!$this->otpService->verifyOtp($phone, $otp, OtpService::PURPOSE_BACK_OFFICE_AUTH)) {
-            return $this->json(['message' => 'OTP invalide'], 401);
-        }
-
         $user = $this->users->findVerifiedUserByPhone($phone);
         if ($user === null) {
             return $this->json(['message' => 'USER_NOT_FOUND'], 404);
@@ -92,6 +88,12 @@ final class BackOfficeAuthController extends AbstractController
 
         if (!$this->canAccessBackOffice($user)) {
             return $this->json(['message' => 'BACK_OFFICE_FORBIDDEN'], 403);
+        }
+
+        $userPayload = $this->userPayload($user);
+
+        if (!$this->otpService->verifyOtp($phone, $otp, OtpService::PURPOSE_BACK_OFFICE_AUTH)) {
+            return $this->json(['message' => 'OTP invalide'], 401);
         }
 
         $tokenVersion = $this->backOfficeAccounts->rotateTokenVersion((int) $user['id']);
@@ -112,7 +114,7 @@ final class BackOfficeAuthController extends AbstractController
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
-            'user' => $this->userPayload($user),
+            'user' => $userPayload,
         ]);
     }
 

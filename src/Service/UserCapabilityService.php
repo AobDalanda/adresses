@@ -33,11 +33,11 @@ final class UserCapabilityService
                     profile.validation_status,
                     profile.can_deliver,
                     profile.can_transport_people,
-                    authorization.status AS authorization_status,
+                    provider_auth.status AS authorization_status,
                     back_office.enabled AS back_office_enabled
                 FROM user_account account
                 LEFT JOIN provider_profile profile ON profile.user_id = account.id
-                LEFT JOIN provider_authorization authorization ON authorization.provider_profile_id = profile.id
+                LEFT JOIN provider_authorization provider_auth ON provider_auth.provider_profile_id = profile.id
                 LEFT JOIN back_office_account back_office ON back_office.user_id = account.id
                 WHERE account.id = :userId
                 LIMIT 1
