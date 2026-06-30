@@ -10,6 +10,7 @@ use App\Dto\Tracking\DriverLocationOutput;
 use App\Dto\Tracking\LocationHistoryQuery;
 use App\Entity\DriverLocation;
 use App\Repository\DriverLocationRepositoryInterface;
+use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 
 final readonly class DriverTrackingService
@@ -17,6 +18,8 @@ final readonly class DriverTrackingService
     public function __construct(
         private DriverLocationRepositoryInterface $locations,
         private LocationPublisherInterface $publisher,
+        private DeliveryTrackingService $deliveryTracking,
+        private Connection $db,
         private LoggerInterface $trackingLogger
     ) {
     }
@@ -35,7 +38,11 @@ final readonly class DriverTrackingService
         );
 
         try {
-            $this->locations->save($location);
+            $deliveryEvents = $this->db->transactional(function () use ($location): int {
+                $this->locations->save($location);
+
+                return $this->deliveryTracking->recordLocationEvents($location);
+            });
         } catch (\Throwable $exception) {
             $this->trackingLogger->error('GPS location persistence failed', [
                 'driverId' => $input->driverId,
@@ -48,6 +55,7 @@ final readonly class DriverTrackingService
             'driverId' => $input->driverId,
             'accuracy' => $input->accuracy,
             'source' => $input->source,
+            'deliveryEvents' => $deliveryEvents,
         ]);
         $this->publisher->publish($location);
 

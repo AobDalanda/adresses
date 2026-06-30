@@ -21,6 +21,23 @@ services:
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=80"
 
+  worker:
+    image: app-app
+    container_name: aldahim_worker
+    restart: unless-stopped
+    command:
+      - php
+      - bin/console
+      - app:outbox:consume
+      - --watch
+      - --sleep=1
+      - --limit=100
+      - --format=json
+    env_file:
+      - .env.prod.local
+    networks:
+      - internal
+
 networks:
   web:
     external: true

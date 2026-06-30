@@ -26,6 +26,13 @@ class DeliveryOrder
     #[ORM\JoinColumn(name: 'customer_id', nullable: false, onDelete: 'CASCADE')]
     private UserAccount $customer;
 
+    #[ORM\ManyToOne(targetEntity: UserAccount::class)]
+    #[ORM\JoinColumn(name: 'assigned_driver_id', nullable: true, onDelete: 'SET NULL')]
+    private ?UserAccount $assignedDriver = null;
+
+    #[ORM\Column(name: 'assigned_at', type: 'datetimetz_immutable', nullable: true)]
+    private ?\DateTimeImmutable $assignedAt = null;
+
     #[ORM\ManyToOne(targetEntity: Address::class)]
     #[ORM\JoinColumn(name: 'pickup_address_id', nullable: false, onDelete: 'RESTRICT')]
     private Address $pickupAddress;
@@ -95,5 +102,15 @@ class DeliveryOrder
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getAssignedDriver(): ?UserAccount
+    {
+        return $this->assignedDriver;
+    }
+
+    public function getAssignedAt(): ?\DateTimeImmutable
+    {
+        return $this->assignedAt;
     }
 }

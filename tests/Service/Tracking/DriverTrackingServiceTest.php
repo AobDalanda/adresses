@@ -9,7 +9,9 @@ use App\Dto\Tracking\LocationHistoryQuery;
 use App\Entity\DriverLocation;
 use App\Repository\DriverLocationRepositoryInterface;
 use App\Service\Tracking\DriverTrackingService;
+use App\Service\Tracking\DeliveryTrackingService;
 use App\Service\Tracking\LocationPublisherInterface;
+use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -22,7 +24,14 @@ final class DriverTrackingServiceTest extends TestCase
         $repository->expects(self::once())->method('save')->with(self::isInstanceOf(DriverLocation::class));
         $publisher->expects(self::once())->method('publish')->willReturn(true);
 
-        $service = new DriverTrackingService($repository, $publisher, new NullLogger());
+        $db = $this->trackingConnection();
+        $service = new DriverTrackingService(
+            $repository,
+            $publisher,
+            new DeliveryTrackingService($db),
+            $db,
+            new NullLogger(),
+        );
         $output = $service->saveLocation(new DriverLocationInput(
             15,
             9.6412,
@@ -47,7 +56,9 @@ final class DriverTrackingServiceTest extends TestCase
         $service = new DriverTrackingService(
             $repository,
             $this->createMock(LocationPublisherInterface::class),
-            new NullLogger()
+            new DeliveryTrackingService($db = $this->trackingConnection()),
+            $db,
+            new NullLogger(),
         );
         $history = $service->getLocationHistory(15, new LocationHistoryQuery(null, null, 100));
 
@@ -65,10 +76,21 @@ final class DriverTrackingServiceTest extends TestCase
         $service = new DriverTrackingService(
             $repository,
             $this->createMock(LocationPublisherInterface::class),
-            new NullLogger()
+            new DeliveryTrackingService($db = $this->trackingConnection()),
+            $db,
+            new NullLogger(),
         );
 
         self::assertSame(1250.4, $service->calculateDistance(15));
         self::assertSame(21.5, $service->calculateAverageSpeed(15));
+    }
+
+    private function trackingConnection(): Connection
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('transactional')->willReturnCallback(static fn (callable $callback): mixed => $callback());
+        $db->method('fetchAllAssociative')->willReturn([]);
+
+        return $db;
     }
 }

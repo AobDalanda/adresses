@@ -28,7 +28,9 @@ final class ConsumeOutboxCommand extends Command
         $this
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Nombre maximal d evenements.', '50')
             ->addOption('max-attempts', null, InputOption::VALUE_REQUIRED, 'Tentatives avant echec definitif.', '5')
-            ->addOption('format', null, InputOption::VALUE_REQUIRED, 'Format: table ou json.', 'table');
+            ->addOption('format', null, InputOption::VALUE_REQUIRED, 'Format: table ou json.', 'table')
+            ->addOption('watch', null, InputOption::VALUE_NONE, 'Reste actif et traite continuellement l outbox.')
+            ->addOption('sleep', null, InputOption::VALUE_REQUIRED, 'Pause en secondes entre deux lots en mode watch.', '1');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -37,6 +39,8 @@ final class ConsumeOutboxCommand extends Command
         $limit = filter_var($input->getOption('limit'), FILTER_VALIDATE_INT);
         $maxAttempts = filter_var($input->getOption('max-attempts'), FILTER_VALIDATE_INT);
         $format = strtolower(trim((string) $input->getOption('format')));
+        $watch = (bool) $input->getOption('watch');
+        $sleep = filter_var($input->getOption('sleep'), FILTER_VALIDATE_FLOAT);
 
         if (!is_int($limit) || $limit < 1 || $limit > 1000) {
             $io->error('La limite doit etre comprise entre 1 et 1000.');
@@ -53,26 +57,42 @@ final class ConsumeOutboxCommand extends Command
 
             return Command::INVALID;
         }
+        if ($sleep === false || $sleep < 0.1 || $sleep > 60) {
+            $io->error('La pause doit etre comprise entre 0.1 et 60 secondes.');
 
-        try {
-            $report = $this->processor->process($limit, $maxAttempts);
-        } catch (\Throwable $exception) {
-            $io->error(sprintf('Traitement outbox impossible: %s', $exception->getMessage()));
-
-            return Command::FAILURE;
+            return Command::INVALID;
         }
 
-        if ($format === 'json') {
-            $output->writeln((string) json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
-        } else {
-            $io->title('Traitement outbox');
-            $io->definitionList(
-                ['Traites' => $report['processed']],
-                ['Publies' => $report['published']],
-                ['A reessayer' => $report['retried']],
-                ['En echec definitif' => $report['failed']],
-            );
-        }
+        do {
+            try {
+                $report = $this->processor->process($limit, $maxAttempts);
+            } catch (\Throwable $exception) {
+                $io->error(sprintf('Traitement outbox impossible: %s', $exception->getMessage()));
+                if (!$watch) {
+                    return Command::FAILURE;
+                }
+                usleep((int) ($sleep * 1_000_000));
+                continue;
+            }
+
+            if (!$watch || $report['processed'] > 0) {
+                if ($format === 'json') {
+                    $output->writeln((string) json_encode($report, JSON_THROW_ON_ERROR));
+                } else {
+                    $io->title('Traitement outbox');
+                    $io->definitionList(
+                        ['Traites' => $report['processed']],
+                        ['Publies' => $report['published']],
+                        ['A reessayer' => $report['retried']],
+                        ['En echec definitif' => $report['failed']],
+                    );
+                }
+            }
+
+            if ($watch) {
+                usleep((int) ($sleep * 1_000_000));
+            }
+        } while ($watch);
 
         return $report['failed'] > 0 ? Command::FAILURE : Command::SUCCESS;
     }

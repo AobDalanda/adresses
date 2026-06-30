@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use Doctrine\DBAL\Connection;
+use App\Service\Tracking\DeliveryLocationPublisher;
 use Symfony\Component\Uid\Uuid;
 
 class OutboxProcessor
@@ -13,6 +14,7 @@ class OutboxProcessor
         private readonly Connection $db,
         private readonly ProviderAutomaticCheckService $automaticChecks,
         private readonly ProviderNotificationService $notifications,
+        private readonly DeliveryLocationPublisher $deliveryLocations,
     ) {
     }
 
@@ -206,6 +208,12 @@ class OutboxProcessor
             ? $event['payload']
             : json_decode((string) $event['payload'], true, flags: JSON_THROW_ON_ERROR);
         $eventName = (string) $event['event_name'];
+
+        if ($eventName === 'delivery.location.updated') {
+            $this->deliveryLocations->publish($payload);
+
+            return;
+        }
 
         if ($eventName === 'provider.application.submitted') {
             $applicationId = $payload['applicationId'] ?? $event['aggregate_id'];
