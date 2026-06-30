@@ -25,6 +25,8 @@ services:
     image: app-app
     container_name: aldahim_worker
     restart: unless-stopped
+    healthcheck:
+      disable: true
     command:
       - php
       - bin/console
