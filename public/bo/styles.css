@@ -40,6 +40,134 @@ textarea {
   font: inherit;
 }
 
+input[type="search"] {
+  min-width: 240px;
+}
+
+.toolbar-actions,
+.row-actions,
+.dialog-actions,
+.dialog-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-toolbar {
+  align-items: flex-end;
+}
+
+.cell-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-badge.enabled {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-badge.disabled {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.table-button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 9px;
+  color: var(--ink);
+  background: #fff;
+  cursor: pointer;
+}
+
+.table-button.danger {
+  color: var(--danger);
+}
+
+.inline-message {
+  min-height: 20px;
+  margin-bottom: 8px;
+  color: var(--brand-strong);
+  font-size: 13px;
+}
+
+.inline-message.error {
+  color: var(--danger);
+}
+
+.user-dialog {
+  width: min(680px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  box-shadow: 0 24px 70px rgba(2, 6, 23, .28);
+}
+
+.user-dialog::backdrop {
+  background: rgba(2, 6, 23, .58);
+}
+
+.user-form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.dialog-heading {
+  justify-content: space-between;
+}
+
+.dialog-close {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.option-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.option-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-group input {
+  width: auto;
+  min-height: auto;
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -437,6 +565,21 @@ select {
 
   .workspace {
     padding: 18px;
+  }
+
+  .user-toolbar,
+  .toolbar-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  input[type="search"] {
+    min-width: 0;
+  }
+
+  .form-grid,
+  .option-group {
+    grid-template-columns: 1fr;
   }
 
   .topbar,

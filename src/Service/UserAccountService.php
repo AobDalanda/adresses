@@ -146,7 +146,7 @@ class UserAccountService
         $phone = PhoneNumberNormalizer::normalize($phone);
 
         return (bool) $this->db->fetchOne(
-            'SELECT EXISTS(SELECT 1 FROM user_account WHERE phone = :phone AND verified = true)',
+            'SELECT EXISTS(SELECT 1 FROM user_account WHERE phone = :phone AND verified = true AND enabled = true)',
             ['phone' => $phone]
         );
     }
@@ -197,6 +197,7 @@ class UserAccountService
             FROM user_account
             WHERE phone = :phone
               AND verified = true
+              AND enabled = true
             LIMIT 1
             ",
             ['phone' => $phone]

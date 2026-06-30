@@ -28,6 +28,9 @@ class UserAccount
     #[ORM\Column]
     private bool $verified = false;
 
+    #[ORM\Column(options: ['default' => true])]
+    private bool $enabled = true;
+
     #[ORM\Column(length: 20, options: ['default' => 'client'])]
     private string $accountType = 'client';
 
@@ -113,6 +116,18 @@ class UserAccount
     public function setVerified(bool $verified): self
     {
         $this->verified = $verified;
+
+        return $this;
+    }
+
+    public function isEnabled(): bool
+    {
+        return $this->enabled;
+    }
+
+    public function setEnabled(bool $enabled): self
+    {
+        $this->enabled = $enabled;
 
         return $this;
     }

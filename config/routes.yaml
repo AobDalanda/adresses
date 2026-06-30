@@ -16,7 +16,7 @@ back_office_pwa_fallback:
     controller: App\Controller\BackOfficeController::index
     methods: [GET]
     requirements:
-        path: '^(overview|providers|subscriptions|settings)$'
+        path: '^(overview|providers|users|subscriptions|settings)$'
 
 home:
     path: /

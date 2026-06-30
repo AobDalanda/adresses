@@ -3,6 +3,8 @@ const state = {
   user: loadStoredUser(),
   providers: [],
   plans: [],
+  users: [],
+  userType: 'BO',
   deferredInstall: null,
   otpRequested: false,
   loginInProgress: false,
@@ -17,6 +19,10 @@ const views = {
   providers: {
     title: 'Prestataires',
     subtitle: 'Dossiers livreurs et prestataires à contrôler.'
+  },
+  users: {
+    title: 'Utilisateurs',
+    subtitle: 'Gestion des comptes BO, prestataires et clients.'
   },
   subscriptions: {
     title: 'Abonnements',
@@ -41,7 +47,7 @@ function loadStoredToken() {
 
 function wasReloadedForVersion() {
   try {
-    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '9';
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '10';
   } catch (error) {
     return false;
   }
@@ -66,27 +72,43 @@ function authorizationHeader() {
 }
 
 async function api(path) {
+  return authorizedJson(path);
+}
+
+async function authorizedJson(path, options = {}) {
   const authorization = authorizationHeader();
   if (!authorization) {
     throw new Error('TOKEN_REQUIRED');
   }
 
   const response = await fetch(path, {
+    method: options.method || 'GET',
     headers: {
       Accept: 'application/json',
-      Authorization: authorization
-    }
+      Authorization: authorization,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined
   });
 
   if (response.status === 401 || response.status === 403) {
     throw new Error('FORBIDDEN');
   }
 
-  if (!response.ok) {
-    throw new Error(`HTTP_${response.status}`);
+  let data = {};
+  if (response.status !== 204) {
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
+    }
   }
 
-  return response.json();
+  if (!response.ok) {
+    throw new Error(typeof data.message === 'string' ? data.message : `HTTP_${response.status}`);
+  }
+
+  return data;
 }
 
 async function postJson(path, payload) {
@@ -140,6 +162,7 @@ function logout() {
   state.user = null;
   state.providers = [];
   state.plans = [];
+  state.users = [];
   state.otpRequested = false;
   try {
     localStorage.removeItem('aldahim.bo.jwt');
@@ -155,6 +178,7 @@ function logout() {
   renderMetrics();
   renderProviders();
   renderPlans();
+  renderUsers();
 }
 
 function updateAuthUi() {
@@ -245,6 +269,174 @@ function renderPlans() {
   `).join('');
 }
 
+function renderUsers() {
+  const tbody = $('[data-user-rows]');
+  if (!tbody) {
+    return;
+  }
+  $('[data-users-count]').textContent = `${state.users.length} utilisateur(s)`;
+  if (!state.users.length) {
+    tbody.innerHTML = '<tr><td colspan="5">Aucun utilisateur à afficher.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = state.users.map((user) => {
+    const details = user.type === 'BO'
+      ? (user.roles || []).map(formatRole).join(', ') || 'Aucun rôle'
+      : user.type === 'PRESTATAIRE'
+        ? [user.canDeliver ? 'Livraison' : '', user.canTransportPeople ? 'Transport' : ''].filter(Boolean).join(', ')
+        : 'Client mobile';
+    const status = user.type === 'PRESTATAIRE' ? normalizeStatus(user.providerStatus) : (user.enabled ? 'actif' : 'désactivé');
+    return `
+      <tr>
+        <td><strong>${escapeHtml(user.name || 'Sans nom')}</strong><br><span class="cell-meta">#${user.id}</span></td>
+        <td>${escapeHtml(user.phone)}<br><span class="cell-meta">${escapeHtml(user.email || 'Sans e-mail')}</span></td>
+        <td><span class="badge">${escapeHtml(user.type)}</span><br><span class="cell-meta">${escapeHtml(details)}</span></td>
+        <td><span class="status-badge ${user.enabled ? 'enabled' : 'disabled'}">${escapeHtml(status)}</span></td>
+        <td class="row-actions">
+          <button class="table-button" type="button" data-user-edit="${user.id}">Modifier</button>
+          <button class="table-button" type="button" data-user-toggle="${user.id}">${user.enabled ? 'Désactiver' : 'Activer'}</button>
+          ${user.type === 'BO' ? '' : `<button class="table-button danger" type="button" data-user-delete="${user.id}">Supprimer</button>`}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function formatRole(role) {
+  const labels = {
+    ROLE_ADMIN: 'Administrateur',
+    ROLE_PROVIDER_REVIEWER: 'Vérification',
+    ROLE_PROVIDER_APPROVER: 'Approbation',
+    ROLE_PROVIDER_SECURITY_ADMIN: 'Suspension'
+  };
+  return labels[role] || role;
+}
+
+async function loadUsers() {
+  if (!state.token) {
+    return;
+  }
+  const type = $('[data-user-type]').value;
+  const search = $('[data-user-search]').value.trim();
+  state.userType = type;
+  setUsersMessage('Chargement...');
+  try {
+    const data = await authorizedJson(`/api/v1/admin/users?type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`);
+    state.users = data.users || [];
+    setUsersMessage('');
+    renderUsers();
+  } catch (error) {
+    state.users = [];
+    renderUsers();
+    setUsersMessage(error.message === 'FORBIDDEN' ? 'Cette section est réservée aux administrateurs.' : error.message, true);
+  }
+}
+
+function setUsersMessage(message, isError = false) {
+  const element = $('[data-users-message]');
+  element.textContent = message;
+  element.classList.toggle('error', isError);
+}
+
+function syncUserFormOptions() {
+  const type = $('[data-user-form-type]').value;
+  $('[data-bo-options]').hidden = type !== 'BO';
+  $('[data-provider-options]').hidden = type !== 'PRESTATAIRE';
+}
+
+function openUserForm(user = null) {
+  const dialog = $('[data-user-dialog]');
+  $('[data-user-form]').reset();
+  $('[data-user-id]').value = user?.id || '';
+  $('[data-user-form-title]').textContent = user ? 'Modifier l’utilisateur' : 'Ajouter un utilisateur';
+  $('[data-user-form-type]').value = user?.type || state.userType;
+  $('[data-user-form-type]').disabled = Boolean(user);
+  $('[data-user-name]').value = user?.name || '';
+  $('[data-user-phone]').value = user?.phone || '';
+  $('[data-user-email]').value = user?.email || '';
+  $$('[data-user-role]').forEach((input) => {
+    input.checked = user ? (user.roles || []).includes(input.value) : input.value === 'ROLE_ADMIN';
+  });
+  $('[data-user-deliver]').checked = Boolean(user?.canDeliver);
+  $('[data-user-transport]').checked = Boolean(user?.canTransportPeople);
+  $('[data-user-form-message]').textContent = '';
+  syncUserFormOptions();
+  dialog.showModal();
+}
+
+function closeUserForm() {
+  $('[data-user-dialog]').close();
+}
+
+async function saveUser(event) {
+  event.preventDefault();
+  const id = $('[data-user-id]').value;
+  const type = $('[data-user-form-type]').value;
+  const payload = {
+    type,
+    name: $('[data-user-name]').value.trim(),
+    phone: $('[data-user-phone]').value.trim(),
+    email: $('[data-user-email]').value.trim(),
+    ...(type === 'BO' ? { roles: $$('[data-user-role]:checked').map((input) => input.value) } : {}),
+    ...(type === 'PRESTATAIRE' ? {
+      canDeliver: $('[data-user-deliver]').checked,
+      canTransportPeople: $('[data-user-transport]').checked
+    } : {})
+  };
+  const message = $('[data-user-form-message]');
+  message.textContent = 'Enregistrement...';
+  message.classList.remove('error');
+  $('[data-user-save]').disabled = true;
+  try {
+    await authorizedJson(id ? `/api/v1/admin/users/${id}` : '/api/v1/admin/users', {
+      method: id ? 'PATCH' : 'POST',
+      body: payload
+    });
+    closeUserForm();
+    $('[data-user-type]').value = type;
+    await loadUsers();
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add('error');
+  } finally {
+    $('[data-user-save]').disabled = false;
+  }
+}
+
+async function handleUserTableAction(event) {
+  const editButton = event.target.closest('[data-user-edit]');
+  const toggleButton = event.target.closest('[data-user-toggle]');
+  const deleteButton = event.target.closest('[data-user-delete]');
+  const id = Number((editButton || toggleButton || deleteButton)?.dataset.userEdit
+    || toggleButton?.dataset.userToggle || deleteButton?.dataset.userDelete);
+  if (!id) {
+    return;
+  }
+  const user = state.users.find((item) => item.id === id);
+  if (!user) {
+    return;
+  }
+  if (editButton) {
+    openUserForm(user);
+    return;
+  }
+  try {
+    if (toggleButton) {
+      await authorizedJson(`/api/v1/admin/users/${id}/status`, {
+        method: 'PATCH', body: { type: user.type, enabled: !user.enabled }
+      });
+    } else if (deleteButton) {
+      if (!window.confirm(`Supprimer définitivement le compte de ${user.name || user.phone} ?`)) {
+        return;
+      }
+      await authorizedJson(`/api/v1/admin/users/${id}?type=${encodeURIComponent(user.type)}`, { method: 'DELETE' });
+    }
+    await loadUsers();
+  } catch (error) {
+    setUsersMessage(error.message, true);
+  }
+}
+
 function formatPrice(plan) {
   const amount = plan.priceAmount ?? plan.amount ?? plan.monthlyAmount;
   const currency = plan.currency || 'GNF';
@@ -297,6 +489,9 @@ async function refresh() {
   renderMetrics();
   renderProviders();
   renderPlans();
+  if ($('[data-view-panel="users"]') && !$('[data-view-panel="users"]').classList.contains('hidden')) {
+    await loadUsers();
+  }
 }
 
 function showDashboardAfterLogin() {
@@ -344,11 +539,11 @@ function registerServiceWorker() {
 
     state.reloadedForVersion = true;
     try {
-      sessionStorage.setItem('aldahim.bo.versionReloaded', '9');
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '10');
     } catch (error) {
       // Continue with the one-time reload even when session storage is unavailable.
     }
-    window.location.replace('/?pwa=aldahim-bo&v=9');
+    window.location.replace('/?pwa=aldahim-bo&v=10');
   });
 
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {
@@ -359,7 +554,12 @@ function registerServiceWorker() {
 }
 
 function bindEvents() {
-  $$('.nav-item').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
+  $$('.nav-item').forEach((button) => button.addEventListener('click', () => {
+    setView(button.dataset.view);
+    if (button.dataset.view === 'users') {
+      loadUsers();
+    }
+  }));
   $('[data-refresh]').addEventListener('click', refresh);
   $('[data-provider-filter]').addEventListener('change', renderProviders);
   $('[data-open-login]').addEventListener('click', () => {
@@ -375,8 +575,24 @@ function bindEvents() {
   $('[data-request-otp]').addEventListener('click', requestOtp);
   $('[data-login-otp]').addEventListener('input', handleOtpInput);
   $('[data-login-form]').addEventListener('submit', login);
+  $('[data-user-type]').addEventListener('change', loadUsers);
+  $('[data-user-search]').addEventListener('input', debounce(loadUsers, 300));
+  $('[data-user-create]').addEventListener('click', () => openUserForm());
+  $('[data-user-form-type]').addEventListener('change', syncUserFormOptions);
+  $('[data-user-form]').addEventListener('submit', saveUser);
+  $('[data-user-rows]').addEventListener('click', handleUserTableAction);
+  $('[data-user-close]').addEventListener('click', closeUserForm);
+  $('[data-user-cancel]').addEventListener('click', closeUserForm);
   window.addEventListener('online', updateOnlineState);
   window.addEventListener('offline', updateOnlineState);
+}
+
+function debounce(callback, delay) {
+  let timeout;
+  return (...args) => {
+    window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => callback(...args), delay);
+  };
 }
 
 function handleOtpInput(event) {

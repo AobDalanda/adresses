@@ -28,7 +28,7 @@ class AuthenticatedIdentityFactory
         }
 
         $user = $this->users->find((int) $claims['uid']);
-        if ($user === null) {
+        if ($user === null || !$user->isEnabled()) {
             return null;
         }
 
