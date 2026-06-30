@@ -32,6 +32,8 @@ final class DeliveryOverviewService
                     delivery.id,
                     delivery.public_id,
                     delivery.status,
+                    delivery.assigned_driver_id,
+                    assigned_driver.name AS assigned_driver_name,
                     delivery.scheduled_at,
                     delivery.created_at,
                     delivery.recipient_name,
@@ -45,6 +47,7 @@ final class DeliveryOverviewService
                 FROM delivery_order delivery
                 LEFT JOIN address pickup ON pickup.id = delivery.pickup_address_id
                 LEFT JOIN address dropoff ON dropoff.id = delivery.dropoff_address_id
+                LEFT JOIN user_account assigned_driver ON assigned_driver.id = delivery.assigned_driver_id
                 LEFT JOIN delivery_pricing_snapshot pricing ON pricing.delivery_order_id = delivery.id
                 WHERE delivery.customer_id = :userId
                 {$statusSql}
@@ -98,6 +101,8 @@ final class DeliveryOverviewService
                     delivery.id,
                     delivery.public_id,
                     delivery.status,
+                    delivery.assigned_driver_id,
+                    assigned_driver.name AS assigned_driver_name,
                     delivery.scheduled_at,
                     delivery.created_at,
                     delivery.notes,
@@ -125,6 +130,7 @@ final class DeliveryOverviewService
                 FROM delivery_order delivery
                 LEFT JOIN address pickup ON pickup.id = delivery.pickup_address_id
                 LEFT JOIN address dropoff ON dropoff.id = delivery.dropoff_address_id
+                LEFT JOIN user_account assigned_driver ON assigned_driver.id = delivery.assigned_driver_id
                 LEFT JOIN delivery_package package ON package.delivery_order_id = delivery.id
                 LEFT JOIN delivery_pricing_snapshot pricing ON pricing.delivery_order_id = delivery.id
                 WHERE delivery.customer_id = :userId
@@ -244,7 +250,20 @@ final class DeliveryOverviewService
                 'id' => $row['dropoff_address_id'] !== null ? (int) $row['dropoff_address_id'] : null,
                 'displayLabel' => $row['dropoff_display_label'] !== null ? (string) $row['dropoff_display_label'] : null,
             ],
-            'driver' => null,
+            'driver' => $row['assigned_driver_id'] !== null ? [
+                'id' => (int) $row['assigned_driver_id'],
+                'name' => $row['assigned_driver_name'] !== null ? (string) $row['assigned_driver_name'] : null,
+            ] : null,
+            'tracking' => $row['assigned_driver_id'] !== null
+                && in_array((string) $row['status'], ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'], true)
+                ? [
+                    'stateUrl' => sprintf('/api/v1/deliveries/%s/tracking', (string) $row['public_id']),
+                    'authorizationUrl' => sprintf(
+                        '/api/v1/deliveries/%s/tracking-authorization',
+                        (string) $row['public_id']
+                    ),
+                ]
+                : null,
             'pricing' => [
                 'totalAmount' => $row['total_amount'] !== null ? (float) $row['total_amount'] : null,
                 'currency' => $row['currency'] !== null ? (string) $row['currency'] : null,
