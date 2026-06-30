@@ -47,7 +47,7 @@ class AuthenticatedIdentityFactory
     {
         if (
             ($claims['typ'] ?? null) !== 'back_office'
-            || ($claims['aud'] ?? null) !== 'bo.aldahim.com'
+            || !$this->hasAudience($claims['aud'] ?? null, 'bo.aldahim.com')
             || !isset($claims['uid'])
         ) {
             return null;
@@ -62,5 +62,14 @@ class AuthenticatedIdentityFactory
         $roles = array_merge(['ROLE_BACK_OFFICE'], $this->roleProvider->rolesForUser($userId));
 
         return new AuthenticatedIdentity($user, 'back_office', array_values(array_unique($roles)), $claims);
+    }
+
+    private function hasAudience(mixed $claim, string $expected): bool
+    {
+        if (is_string($claim)) {
+            return $claim === $expected;
+        }
+
+        return is_array($claim) && in_array($expected, $claim, true);
     }
 }

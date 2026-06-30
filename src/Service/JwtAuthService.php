@@ -76,7 +76,7 @@ class JwtAuthService
         if (in_array($payload['typ'] ?? null, ['back_office', 'back_office_refresh'], true)) {
             if (
                 !isset($payload['uid'], $payload['tv'])
-                || ($payload['aud'] ?? null) !== 'bo.aldahim.com'
+                || !$this->hasAudience($payload['aud'] ?? null, 'bo.aldahim.com')
             ) {
                 return null;
             }
@@ -88,5 +88,14 @@ class JwtAuthService
         }
 
         return $payload;
+    }
+
+    private function hasAudience(mixed $claim, string $expected): bool
+    {
+        if (is_string($claim)) {
+            return $claim === $expected;
+        }
+
+        return is_array($claim) && in_array($expected, $claim, true);
     }
 }

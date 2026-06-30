@@ -41,7 +41,7 @@ function loadStoredToken() {
 
 function wasReloadedForVersion() {
   try {
-    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '8';
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '9';
   } catch (error) {
     return false;
   }
@@ -344,11 +344,11 @@ function registerServiceWorker() {
 
     state.reloadedForVersion = true;
     try {
-      sessionStorage.setItem('aldahim.bo.versionReloaded', '8');
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '9');
     } catch (error) {
       // Continue with the one-time reload even when session storage is unavailable.
     }
-    window.location.replace('/?pwa=aldahim-bo&v=8');
+    window.location.replace('/?pwa=aldahim-bo&v=9');
   });
 
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {
