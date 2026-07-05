@@ -17,6 +17,8 @@ final class UploadStorageService
         'vehicle_registration_back' => 'vehicle-docs',
         'vehicle_photo' => 'vehicle-photos',
         'package_photo' => 'package-photos',
+        'delivery_photo' => 'delivery-proofs',
+        'recipient_signature' => 'delivery-proofs',
         'profile_photo' => 'profile-photos',
     ];
 
@@ -29,6 +31,8 @@ final class UploadStorageService
         'vehicle_registration_back' => ['jpg', 'jpeg', 'png'],
         'vehicle_photo' => ['jpg', 'jpeg', 'png', 'webp'],
         'package_photo' => ['jpg', 'jpeg', 'png', 'webp'],
+        'delivery_photo' => ['jpg', 'jpeg', 'png', 'webp'],
+        'recipient_signature' => ['jpg', 'jpeg', 'png', 'webp'],
         'profile_photo' => ['jpg', 'jpeg', 'png', 'webp'],
     ];
 
@@ -66,7 +70,7 @@ final class UploadStorageService
         }
 
         try {
-            $validated = in_array($category, ['vehicle_photo', 'package_photo', 'profile_photo'], true)
+            $validated = in_array($category, ['vehicle_photo', 'package_photo', 'delivery_photo', 'recipient_signature', 'profile_photo'], true)
                 ? $this->validator->validatePhoto($file)
                 : $this->validator->validateDocument($file);
         } catch (\RuntimeException $exception) {

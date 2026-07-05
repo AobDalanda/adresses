@@ -10,7 +10,10 @@ final readonly class MissionOverviewService
 {
     private const ELIGIBLE_STATUSES = "'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'";
 
-    public function __construct(private Connection $db)
+    public function __construct(
+        private Connection $db,
+        private ?SupabaseStorageClient $storage = null,
+    )
     {
     }
 
@@ -123,6 +126,51 @@ final readonly class MissionOverviewService
             'signatureRequired' => (bool) ($row['package_signature_required'] ?? false),
             'photoAssetId' => $row['package_photo_asset_id'] !== null ? (int) $row['package_photo_asset_id'] : null,
         ];
+        $mission['summary'] = [
+            'distanceKm' => $row['distance_km'] !== null ? (float) $row['distance_km'] : null,
+            'durationMinutes' => $row['duration_minutes'] !== null ? (int) $row['duration_minutes'] : null,
+            'pickedUpAt' => $row['started_at'] !== null ? (string) $row['started_at'] : null,
+            'deliveredAt' => $row['completed_at'] !== null ? (string) $row['completed_at'] : null,
+        ];
+        $mission['deliveryProof'] = [
+            'status' => $row['delivery_status'] === 'DELIVERED' ? 'available' : 'pending',
+            'receptionCode' => $row['proof_reception_code'] !== null ? (string) $row['proof_reception_code'] : null,
+            'recipientName' => $row['proof_recipient_name'] !== null ? (string) $row['proof_recipient_name'] : null,
+            'recipientSignature' => [
+                'required' => (bool) ($row['package_signature_required'] ?? false),
+                'signed' => $row['proof_signature_asset_id'] !== null,
+                'signedAt' => $row['proof_signed_at'] !== null ? (string) $row['proof_signed_at'] : null,
+                'assetId' => $row['proof_signature_asset_id'] !== null ? (int) $row['proof_signature_asset_id'] : null,
+                'url' => $this->assetUrl($row['proof_signature_bucket'] ?? null, $row['proof_signature_object_key'] ?? null),
+            ],
+            'deliveryPhoto' => [
+                'required' => true,
+                'captured' => $row['proof_delivery_photo_asset_id'] !== null,
+                'capturedAt' => $row['proof_photo_captured_at'] !== null ? (string) $row['proof_photo_captured_at'] : null,
+                'assetId' => $row['proof_delivery_photo_asset_id'] !== null ? (int) $row['proof_delivery_photo_asset_id'] : null,
+                'url' => $this->assetUrl($row['proof_photo_bucket'] ?? null, $row['proof_photo_object_key'] ?? null),
+            ],
+        ];
+        $mission['payment'] = [
+            'amount' => $row['pricing_total_amount'] !== null ? (string) $row['pricing_total_amount'] : null,
+            'currency' => $row['pricing_currency'] !== null ? (string) $row['pricing_currency'] : null,
+            'status' => $row['earning_settlement_status'] !== null
+                ? strtolower((string) $row['earning_settlement_status'])
+                : ($row['delivery_status'] === 'DELIVERED' ? 'settlement_pending' : 'pending'),
+            'paidAt' => $row['earning_settled_at'] !== null ? (string) $row['earning_settled_at'] : null,
+            'breakdown' => [
+                'baseAmount' => $row['pricing_base_amount'] !== null ? (string) $row['pricing_base_amount'] : null,
+                'surchargeAmount' => $row['pricing_surcharge_amount'] !== null ? (string) $row['pricing_surcharge_amount'] : null,
+                'totalAmount' => $row['pricing_total_amount'] !== null ? (string) $row['pricing_total_amount'] : null,
+            ],
+            'driverEarning' => [
+                'amount' => $mission['earning']['amount'],
+                'estimatedAmount' => $mission['earning']['estimatedAmount'],
+                'finalAmount' => $mission['earning']['finalAmount'],
+                'currency' => $mission['earning']['currency'],
+                'isEstimated' => $mission['earning']['isEstimated'],
+            ],
+        ];
         $mission['history'] = array_map(
             static fn (array $entry): array => [
                 'status' => (string) $entry['status'],
@@ -185,9 +233,25 @@ final readonly class MissionOverviewService
                 package.photo_asset_id AS package_photo_asset_id,
                 pricing.distance_km,
                 pricing.duration_minutes,
+                pricing.base_amount AS pricing_base_amount,
+                pricing.surcharge_amount AS pricing_surcharge_amount,
+                pricing.total_amount AS pricing_total_amount,
+                pricing.currency AS pricing_currency,
                 earning.estimated_amount,
                 earning.final_amount,
                 earning.currency AS earning_currency,
+                earning.settlement_status AS earning_settlement_status,
+                earning.settled_at AS earning_settled_at,
+                proof.reception_code AS proof_reception_code,
+                proof.recipient_name AS proof_recipient_name,
+                proof.recipient_signature_asset_id AS proof_signature_asset_id,
+                proof.delivery_photo_asset_id AS proof_delivery_photo_asset_id,
+                proof.signed_at AS proof_signed_at,
+                proof.photo_captured_at AS proof_photo_captured_at,
+                signature_asset.bucket AS proof_signature_bucket,
+                signature_asset.object_key AS proof_signature_object_key,
+                photo_asset.bucket AS proof_photo_bucket,
+                photo_asset.object_key AS proof_photo_object_key,
                 {$groupExpression} AS mission_status
             FROM delivery_order delivery
             JOIN address pickup ON pickup.id = delivery.pickup_address_id
@@ -198,6 +262,9 @@ final readonly class MissionOverviewService
             LEFT JOIN delivery_package package ON package.delivery_order_id = delivery.id
             LEFT JOIN delivery_pricing_snapshot pricing ON pricing.delivery_order_id = delivery.id
             LEFT JOIN delivery_driver_earning earning ON earning.delivery_order_id = delivery.id
+            LEFT JOIN delivery_proof proof ON proof.delivery_order_id = delivery.id
+            LEFT JOIN uploaded_asset signature_asset ON signature_asset.id = proof.recipient_signature_asset_id
+            LEFT JOIN uploaded_asset photo_asset ON photo_asset.id = proof.delivery_photo_asset_id
             SQL;
     }
 
@@ -398,5 +465,18 @@ final readonly class MissionOverviewService
                 'payload' => ['status' => $nextStatus],
             ] : null,
         ];
+    }
+
+    private function assetUrl(mixed $bucket, mixed $objectKey): ?string
+    {
+        if ($this->storage === null || !is_string($bucket) || $bucket === '' || !is_string($objectKey) || $objectKey === '') {
+            return null;
+        }
+
+        try {
+            return $this->storage->createSignedUrl(sprintf('supabase://%s/%s', $bucket, ltrim($objectKey, '/')));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

@@ -18,7 +18,7 @@ final class MissionOverviewServiceTest extends TestCase
             ->with(self::callback(static fn (string $sql): bool =>
                 str_contains($sql, 'delivery.assigned_driver_id = :driverId')
                 && str_contains($sql, "delivery.status IN ('ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED')")
-                && preg_match('/delivery\.id\s+WHERE delivery\.assigned_driver_id/', $sql) === 1
+                && str_contains($sql, 'LEFT JOIN delivery_proof proof ON proof.delivery_order_id = delivery.id')
                 && !str_contains($sql, 'geo_plus_code')
             ))
             ->willReturn([$this->missionRow()]);
@@ -48,6 +48,18 @@ final class MissionOverviewServiceTest extends TestCase
         $row['delivery_status'] = 'DELIVERED';
         $row['estimated_amount'] = '6500.00';
         $row['final_amount'] = '7000.00';
+        $row['earning_settlement_status'] = 'PAID';
+        $row['earning_settled_at'] = '2026-07-05T11:05:00+00:00';
+        $row['proof_reception_code'] = '456789';
+        $row['proof_recipient_name'] = 'M. Camara';
+        $row['proof_signature_asset_id'] = 501;
+        $row['proof_delivery_photo_asset_id'] = 502;
+        $row['proof_signed_at'] = '2026-07-05T11:00:00+00:00';
+        $row['proof_photo_captured_at'] = '2026-07-05T11:00:00+00:00';
+        $row['proof_signature_bucket'] = 'private';
+        $row['proof_signature_object_key'] = 'delivery-proofs/signature.png';
+        $row['proof_photo_bucket'] = 'private';
+        $row['proof_photo_object_key'] = 'delivery-proofs/photo.png';
 
         $db = $this->createMock(Connection::class);
         $db->expects(self::once())
@@ -56,7 +68,7 @@ final class MissionOverviewServiceTest extends TestCase
                 self::callback(static fn (string $sql): bool =>
                     str_contains($sql, 'delivery.assigned_driver_id = :driverId')
                     && str_contains($sql, 'delivery.public_id = :publicId')
-                    && preg_match('/delivery\.id\s+WHERE delivery\.assigned_driver_id/', $sql) === 1
+                    && str_contains($sql, 'LEFT JOIN uploaded_asset photo_asset ON photo_asset.id = proof.delivery_photo_asset_id')
                 ),
                 self::callback(static fn (array $params): bool => $params['driverId'] === 42)
             )
@@ -69,12 +81,30 @@ final class MissionOverviewServiceTest extends TestCase
                 'comment' => null,
                 'created_at' => '2026-07-05T11:00:00+00:00',
             ]]);
+        $storage = $this->createMock(\App\Service\SupabaseStorageClient::class);
+        $storage->expects(self::exactly(2))
+            ->method('createSignedUrl')
+            ->willReturnOnConsecutiveCalls(
+                'https://cdn.test/signature',
+                'https://cdn.test/photo',
+            );
 
-        $mission = (new MissionOverviewService($db))->detailForDriver(42, (string) $row['public_id']);
+        $mission = (new MissionOverviewService($db, $storage))->detailForDriver(42, (string) $row['public_id']);
 
         self::assertSame('7000.00', $mission['earning']['amount']);
         self::assertFalse($mission['earning']['isEstimated']);
         self::assertSame('DELIVERED', $mission['history'][0]['status']);
+        self::assertSame(8.4, $mission['summary']['distanceKm']);
+        self::assertSame('7000.00', $mission['payment']['driverEarning']['amount']);
+        self::assertSame('12500.00', $mission['payment']['amount']);
+        self::assertSame('paid', $mission['payment']['status']);
+        self::assertSame('2026-07-05T11:05:00+00:00', $mission['payment']['paidAt']);
+        self::assertSame('available', $mission['deliveryProof']['status']);
+        self::assertTrue($mission['deliveryProof']['recipientSignature']['required']);
+        self::assertSame('456789', $mission['deliveryProof']['receptionCode']);
+        self::assertSame('M. Camara', $mission['deliveryProof']['recipientName']);
+        self::assertSame('https://cdn.test/signature', $mission['deliveryProof']['recipientSignature']['url']);
+        self::assertSame('https://cdn.test/photo', $mission['deliveryProof']['deliveryPhoto']['url']);
     }
 
     /** @return array{status: string, page: int, perPage: int, sort: string, dateFrom: ?string, dateTo: ?string} */
@@ -122,9 +152,27 @@ final class MissionOverviewServiceTest extends TestCase
             'dropoff_gps_source' => 'geocoder',
             'distance_km' => '8.40',
             'duration_minutes' => 22,
+            'pricing_base_amount' => '11000.00',
+            'pricing_surcharge_amount' => '1500.00',
+            'pricing_total_amount' => '12500.00',
+            'pricing_currency' => 'GNF',
             'estimated_amount' => '6500.00',
             'final_amount' => null,
             'earning_currency' => 'GNF',
+            'earning_settlement_status' => null,
+            'earning_settled_at' => null,
+            'package_signature_required' => true,
+            'package_photo_asset_id' => null,
+            'proof_reception_code' => null,
+            'proof_recipient_name' => null,
+            'proof_signature_asset_id' => null,
+            'proof_delivery_photo_asset_id' => null,
+            'proof_signed_at' => null,
+            'proof_photo_captured_at' => null,
+            'proof_signature_bucket' => null,
+            'proof_signature_object_key' => null,
+            'proof_photo_bucket' => null,
+            'proof_photo_object_key' => null,
         ];
     }
 }

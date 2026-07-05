@@ -38,13 +38,13 @@ final class UploadFileAction
 
         try {
             $normalizedCategory = trim($category);
-            if ($normalizedCategory === 'package_photo') {
+            if (in_array($normalizedCategory, ['package_photo', 'delivery_photo', 'recipient_signature'], true)) {
                 $auth = $this->jwt->decodeFromRequest($request);
                 if (!$auth || ($auth['typ'] ?? null) !== 'mobile' || !isset($auth['uid'])) {
                     return new JsonResponse(['message' => 'Unauthorized'], 401);
                 }
 
-                $stored = $this->deliveryPackageUploads->upload((int) $auth['uid'], $file);
+                $stored = $this->deliveryPackageUploads->upload((int) $auth['uid'], $file, $normalizedCategory);
 
                 return new JsonResponse([
                     'success' => true,

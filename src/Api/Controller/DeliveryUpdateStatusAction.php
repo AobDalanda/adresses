@@ -42,12 +42,36 @@ final readonly class DeliveryUpdateStatusAction
             return new JsonResponse(['message' => 'comment est invalide'], 400);
         }
 
+        $proof = [
+            'receptionCode' => $payload['receptionCode'] ?? null,
+            'recipientName' => $payload['recipientName'] ?? null,
+            'recipientSignatureAssetId' => $payload['recipientSignatureAssetId'] ?? null,
+            'deliveryPhotoAssetId' => $payload['deliveryPhotoAssetId'] ?? null,
+        ];
+
+        foreach (['receptionCode', 'recipientName'] as $field) {
+            if ($proof[$field] !== null && !is_string($proof[$field])) {
+                return new JsonResponse(['message' => sprintf('%s est invalide', $field)], 400);
+            }
+        }
+        foreach (['recipientSignatureAssetId', 'deliveryPhotoAssetId'] as $field) {
+            if ($proof[$field] !== null && filter_var($proof[$field], FILTER_VALIDATE_INT) === false) {
+                return new JsonResponse(['message' => sprintf('%s est invalide', $field)], 400);
+            }
+        }
+
         try {
             $result = $this->transitions->transition(
                 $publicId,
                 $identity->userId,
                 strtoupper(trim($status)),
                 $comment !== null ? trim($comment) : null,
+                [
+                    'receptionCode' => is_string($proof['receptionCode']) ? trim($proof['receptionCode']) : null,
+                    'recipientName' => is_string($proof['recipientName']) ? trim($proof['recipientName']) : null,
+                    'recipientSignatureAssetId' => $proof['recipientSignatureAssetId'] !== null ? (int) $proof['recipientSignatureAssetId'] : null,
+                    'deliveryPhotoAssetId' => $proof['deliveryPhotoAssetId'] !== null ? (int) $proof['deliveryPhotoAssetId'] : null,
+                ],
             );
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['message' => $exception->getMessage()], 400);

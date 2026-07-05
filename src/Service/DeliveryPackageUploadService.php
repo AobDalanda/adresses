@@ -8,6 +8,12 @@ use Symfony\Component\Uid\Uuid;
 
 final class DeliveryPackageUploadService
 {
+    private const DELIVERY_UPLOAD_CATEGORIES = [
+        'package_photo' => ['purpose' => 'DELIVERY_ORDER', 'allowedCategories' => '["package_photo"]'],
+        'delivery_photo' => ['purpose' => 'DELIVERY_PROOF', 'allowedCategories' => '["delivery_photo"]'],
+        'recipient_signature' => ['purpose' => 'DELIVERY_PROOF', 'allowedCategories' => '["recipient_signature"]'],
+    ];
+
     public function __construct(
         private readonly Connection $db,
         private readonly UploadStorageService $storage,
@@ -29,13 +35,17 @@ final class DeliveryPackageUploadService
      *     consumed: bool
      * }
      */
-    public function upload(int $userId, UploadedFile $file): array
+    public function upload(int $userId, UploadedFile $file, string $category = 'package_photo'): array
     {
         $storedPath = null;
+        $config = self::DELIVERY_UPLOAD_CATEGORIES[$category] ?? null;
+        if ($config === null) {
+            throw new \InvalidArgumentException('category est invalide');
+        }
 
         try {
-            return $this->db->transactional(function () use ($userId, $file, &$storedPath): array {
-                $stored = $this->storage->store('package_photo', $file);
+            return $this->db->transactional(function () use ($userId, $file, $category, $config, &$storedPath): array {
+                $stored = $this->storage->store($category, $file);
                 $storedPath = $stored['path'];
                 $location = $this->parseStorageUri($stored['path']);
                 $sessionPublicId = Uuid::v7()->toRfc4122();
@@ -62,8 +72,8 @@ final class DeliveryPackageUploadService
                             :publicId,
                             :userId,
                             NULL,
-                            'DELIVERY_ORDER',
-                            '["package_photo"]'::jsonb,
+                            :purpose,
+                            CAST(:allowedCategories AS jsonb),
                             1,
                             :maxBytes,
                             'COMPLETED',
@@ -77,6 +87,8 @@ final class DeliveryPackageUploadService
                     [
                         'publicId' => $sessionPublicId,
                         'userId' => $userId,
+                        'purpose' => $config['purpose'],
+                        'allowedCategories' => $config['allowedCategories'],
                         'maxBytes' => $stored['size'],
                         'nonce' => $sessionNonce,
                     ]
@@ -100,7 +112,7 @@ final class DeliveryPackageUploadService
                         VALUES (
                             :publicId,
                             :sessionId,
-                            'package_photo',
+                            :category,
                             :bucket,
                             :objectKey,
                             :mimeType,
@@ -115,6 +127,7 @@ final class DeliveryPackageUploadService
                     [
                         'publicId' => $assetPublicId,
                         'sessionId' => $sessionId,
+                        'category' => $category,
                         'bucket' => $location['bucket'],
                         'objectKey' => $location['objectKey'],
                         'mimeType' => $stored['mimeType'],
@@ -128,7 +141,7 @@ final class DeliveryPackageUploadService
                     'assetId' => $assetId,
                     'assetPublicId' => $assetPublicId,
                     'sessionId' => $sessionPublicId,
-                    'category' => 'package_photo',
+                    'category' => $category,
                     'path' => $stored['path'],
                     'mimeType' => $stored['mimeType'],
                     'extension' => $stored['extension'],
