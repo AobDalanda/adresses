@@ -28,7 +28,7 @@ final readonly class MissionOverviewService
         $offset = ($filters['page'] - 1) * $filters['perPage'];
 
         $rows = $this->db->fetchAllAssociative(
-            $this->baseSelect($groupExpression).<<<SQL
+            $this->baseSelect($groupExpression)."\n".<<<SQL
                 {$where}
                 {$this->orderBy($filters['sort'], $groupExpression)}
                 LIMIT :limit OFFSET :offset
@@ -84,7 +84,7 @@ final readonly class MissionOverviewService
         $groupExpression = $this->groupExpression();
         $eligibleStatuses = self::ELIGIBLE_STATUSES;
         $row = $this->db->fetchAssociative(
-            $this->baseSelect($groupExpression).<<<SQL
+            $this->baseSelect($groupExpression)."\n".<<<SQL
                 WHERE delivery.assigned_driver_id = :driverId
                   AND delivery.public_id = :publicId
                   AND delivery.status IN ({$eligibleStatuses})

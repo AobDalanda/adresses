@@ -18,6 +18,7 @@ final class MissionOverviewServiceTest extends TestCase
             ->with(self::callback(static fn (string $sql): bool =>
                 str_contains($sql, 'delivery.assigned_driver_id = :driverId')
                 && str_contains($sql, "delivery.status IN ('ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED')")
+                && preg_match('/delivery\.id\s+WHERE delivery\.assigned_driver_id/', $sql) === 1
                 && !str_contains($sql, 'geo_plus_code')
             ))
             ->willReturn([$this->missionRow()]);
@@ -55,6 +56,7 @@ final class MissionOverviewServiceTest extends TestCase
                 self::callback(static fn (string $sql): bool =>
                     str_contains($sql, 'delivery.assigned_driver_id = :driverId')
                     && str_contains($sql, 'delivery.public_id = :publicId')
+                    && preg_match('/delivery\.id\s+WHERE delivery\.assigned_driver_id/', $sql) === 1
                 ),
                 self::callback(static fn (array $params): bool => $params['driverId'] === 42)
             )
