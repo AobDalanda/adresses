@@ -134,6 +134,7 @@ final readonly class MissionOverviewService
                 ['id' => (int) $row['internal_id']]
             )
         );
+        $mission['workflow'] = $this->workflow((string) $row['delivery_status'], (string) $row['public_id']);
 
         return $mission;
     }
@@ -344,6 +345,58 @@ final readonly class MissionOverviewService
             'longitude' => $row[$prefix.'_longitude'] !== null ? (float) $row[$prefix.'_longitude'] : null,
             'gpsPrecisionM' => $row[$prefix.'_accuracy_m'] !== null ? (float) $row[$prefix.'_accuracy_m'] : null,
             'gpsSource' => $row[$prefix.'_gps_source'] !== null ? (string) $row[$prefix.'_gps_source'] : null,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     currentStatus: string,
+     *     steps: list<array{code: string, label: string, state: string}>,
+     *     nextAction: ?array{code: string, label: string, method: string, href: string, payload: array{status: string}}
+     * }
+     */
+    private function workflow(string $deliveryStatus, string $publicId): array
+    {
+        $order = ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+        $labels = [
+            'ASSIGNED' => 'Vers ramassage',
+            'PICKED_UP' => 'Colis récupéré',
+            'IN_TRANSIT' => 'Vers destination',
+            'DELIVERED' => 'Livraison effectuée',
+        ];
+        $currentIndex = array_search($deliveryStatus, $order, true);
+
+        $steps = [];
+        foreach ($order as $index => $status) {
+            $state = 'upcoming';
+            if ($currentIndex !== false) {
+                $state = $index < $currentIndex ? 'completed' : ($index === $currentIndex ? 'current' : 'upcoming');
+            }
+
+            $steps[] = [
+                'code' => $status,
+                'label' => $labels[$status],
+                'state' => $state,
+            ];
+        }
+
+        $nextStatus = match ($deliveryStatus) {
+            'ASSIGNED' => 'PICKED_UP',
+            'PICKED_UP' => 'IN_TRANSIT',
+            'IN_TRANSIT' => 'DELIVERED',
+            default => null,
+        };
+
+        return [
+            'currentStatus' => $deliveryStatus,
+            'steps' => $steps,
+            'nextAction' => $nextStatus !== null ? [
+                'code' => 'advance_delivery_status',
+                'label' => $labels[$nextStatus],
+                'method' => 'POST',
+                'href' => sprintf('/api/v1/deliveries/%s/status', $publicId),
+                'payload' => ['status' => $nextStatus],
+            ] : null,
         ];
     }
 }
