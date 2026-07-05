@@ -202,6 +202,7 @@ final class DeliveryCreateAction
             'widthCm' => $this->readOptionalNumeric($value['widthCm'] ?? null, 'package.widthCm'),
             'heightCm' => $this->readOptionalNumeric($value['heightCm'] ?? null, 'package.heightCm'),
             'fragile' => $this->readOptionalBool($value['fragile'] ?? null, 'package.fragile') ?? false,
+            'signatureRequired' => $this->readOptionalBool($value['signatureRequired'] ?? null, 'package.signatureRequired') ?? false,
             'photoAssetId' => $this->readOptionalPositiveInt($value['photoAssetId'] ?? null, 'package.photoAssetId'),
         ];
     }

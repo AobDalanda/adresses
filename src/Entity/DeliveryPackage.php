@@ -42,6 +42,9 @@ class DeliveryPackage
     #[ORM\Column]
     private bool $fragile = false;
 
+    #[ORM\Column(name: 'signature_required')]
+    private bool $signatureRequired = false;
+
     #[ORM\Column(name: 'photo_asset_id', type: 'bigint', nullable: true)]
     private ?int $photoAssetId = null;
 

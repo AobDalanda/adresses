@@ -107,6 +107,22 @@ final readonly class MissionOverviewService
             'name' => $row['recipient_name'] !== null ? (string) $row['recipient_name'] : null,
             'phone' => $row['recipient_phone'] !== null ? (string) $row['recipient_phone'] : null,
         ];
+        $mission['package'] = [
+            'type' => 'colis',
+            'typeLabel' => 'Colis',
+            'description' => $row['package_description'] !== null ? (string) $row['package_description'] : null,
+            'declaredValueAmount' => $row['package_declared_value_amount'] !== null ? (float) $row['package_declared_value_amount'] : null,
+            'declaredValueCurrency' => $row['package_declared_value_currency'] !== null ? (string) $row['package_declared_value_currency'] : null,
+            'weightKg' => $row['package_weight_kg'] !== null ? (float) $row['package_weight_kg'] : null,
+            'dimensionsCm' => [
+                'length' => $row['package_length_cm'] !== null ? (float) $row['package_length_cm'] : null,
+                'width' => $row['package_width_cm'] !== null ? (float) $row['package_width_cm'] : null,
+                'height' => $row['package_height_cm'] !== null ? (float) $row['package_height_cm'] : null,
+            ],
+            'fragile' => (bool) ($row['package_fragile'] ?? false),
+            'signatureRequired' => (bool) ($row['package_signature_required'] ?? false),
+            'photoAssetId' => $row['package_photo_asset_id'] !== null ? (int) $row['package_photo_asset_id'] : null,
+        ];
         $mission['history'] = array_map(
             static fn (array $entry): array => [
                 'status' => (string) $entry['status'],
@@ -156,6 +172,16 @@ final readonly class MissionOverviewService
                 ST_X(dropoff_location.final_geom::geometry) AS dropoff_longitude,
                 dropoff_location.accuracy_m AS dropoff_accuracy_m,
                 dropoff_location.source AS dropoff_gps_source,
+                package.description AS package_description,
+                package.declared_value_amount AS package_declared_value_amount,
+                package.declared_value_currency AS package_declared_value_currency,
+                package.weight_kg AS package_weight_kg,
+                package.length_cm AS package_length_cm,
+                package.width_cm AS package_width_cm,
+                package.height_cm AS package_height_cm,
+                package.fragile AS package_fragile,
+                package.signature_required AS package_signature_required,
+                package.photo_asset_id AS package_photo_asset_id,
                 pricing.distance_km,
                 pricing.duration_minutes,
                 earning.estimated_amount,
@@ -168,6 +194,7 @@ final readonly class MissionOverviewService
             LEFT JOIN gps_weighted_location pickup_location ON pickup_location.id = pickup.weighted_location_id
             LEFT JOIN gps_weighted_location dropoff_location ON dropoff_location.id = dropoff.weighted_location_id
             LEFT JOIN service_types service_type ON service_type.code = delivery.service_type_code
+            LEFT JOIN delivery_package package ON package.delivery_order_id = delivery.id
             LEFT JOIN delivery_pricing_snapshot pricing ON pricing.delivery_order_id = delivery.id
             LEFT JOIN delivery_driver_earning earning ON earning.delivery_order_id = delivery.id
             SQL;

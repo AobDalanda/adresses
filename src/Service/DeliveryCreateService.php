@@ -46,6 +46,7 @@ final class DeliveryCreateService
      *         widthCm?: ?float,
      *         heightCm?: ?float,
      *         fragile?: bool,
+     *         signatureRequired?: bool,
      *         photoAssetId?: ?int
      *     }
      * } $payload
@@ -163,6 +164,7 @@ final class DeliveryCreateService
                             width_cm,
                             height_cm,
                             fragile,
+                            signature_required,
                             photo_asset_id,
                             created_at
                         )
@@ -176,6 +178,7 @@ final class DeliveryCreateService
                             :widthCm,
                             :heightCm,
                             :fragile,
+                            :signatureRequired,
                             :photoAssetId,
                             now()
                         )
@@ -190,6 +193,7 @@ final class DeliveryCreateService
                         'widthCm' => $package['widthCm'] ?? null,
                         'heightCm' => $package['heightCm'] ?? null,
                         'fragile' => $package['fragile'] ?? false,
+                        'signatureRequired' => $package['signatureRequired'] ?? false,
                         'photoAssetId' => $package['photoAssetId'] ?? null,
                         ]
                 );

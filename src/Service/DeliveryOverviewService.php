@@ -120,6 +120,7 @@ final class DeliveryOverviewService
                     package.width_cm,
                     package.height_cm,
                     package.fragile,
+                    package.signature_required,
                     package.photo_asset_id,
                     pricing.distance_km,
                     pricing.duration_minutes,
@@ -172,6 +173,7 @@ final class DeliveryOverviewService
             'widthCm' => $row['width_cm'] !== null ? (float) $row['width_cm'] : null,
             'heightCm' => $row['height_cm'] !== null ? (float) $row['height_cm'] : null,
             'fragile' => (bool) ($row['fragile'] ?? false),
+            'signatureRequired' => (bool) ($row['signature_required'] ?? false),
             'photoAssetId' => $row['photo_asset_id'] !== null ? (int) $row['photo_asset_id'] : null,
         ];
         $item['pricing'] = [
