@@ -2,3 +2,4 @@
 .idea
 vendor
 var
+config/firebase/service-account.json

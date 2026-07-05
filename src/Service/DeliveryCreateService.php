@@ -543,16 +543,22 @@ final class DeliveryCreateService
 
     private function resolveCustomerType(int $userId): string
     {
+        $isProvider = (bool) $this->db->fetchOne(
+            'SELECT EXISTS(SELECT 1 FROM provider_profile WHERE user_id = :userId)',
+            ['userId' => $userId]
+        );
+        if ($isProvider) {
+            return 'PROVIDER';
+        }
+
         $accountType = $this->db->fetchOne(
             'SELECT account_type FROM user_account WHERE id = :userId LIMIT 1',
             ['userId' => $userId]
         );
 
-        if (!is_string($accountType) || trim($accountType) === '') {
-            return 'CLIENT';
-        }
+        $normalized = is_string($accountType) ? $this->normalizeCode($accountType) : '';
 
-        return $this->normalizeCode($accountType);
+        return $normalized === 'BUSINESS' ? 'BUSINESS' : 'CLIENT';
     }
 
     private function normalizeCode(string $code): string

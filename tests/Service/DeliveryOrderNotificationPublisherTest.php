@@ -208,8 +208,12 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
     {
         $db = $this->createMock(Connection::class);
         $db->method('fetchAllAssociative')
-            ->with(self::stringContains('FROM user_account account'))
-            ->willReturn($targets);
+            ->willReturnCallback(static function (string $sql) use ($targets): array {
+                self::assertStringContainsString('FROM user_account account', $sql);
+                self::assertStringContainsString('JOIN provider_authorization provider_auth', $sql);
+
+                return $targets;
+            });
         $db->method('executeStatement')->willReturn(1);
 
         return $db;

@@ -8,6 +8,28 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /deliveries/{deliveryId}/accept:
+    post:
+      tags: [Delivery assignment]
+      summary: Accepter atomiquement une livraison disponible
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Livraison assignee au livreur authentifie et marquee en cours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryAcceptance'
+        '401':
+          description: JWT absent ou invalide
+        '403':
+          description: Le compte authentifie n'est pas un livreur autorise
+        '409':
+          description: Livraison inexistante, indisponible ou deja acceptee
   /drivers/location:
     post:
       tags: [Driver tracking]
@@ -129,6 +151,16 @@ components:
       required: true
       schema: { type: integer, minimum: 1 }
   schemas:
+    DeliveryAcceptance:
+      type: object
+      required: [deliveryId, driverId, status, statusLabel, statusGroup, assignedAt]
+      properties:
+        deliveryId: { type: string, format: uuid }
+        driverId: { type: integer }
+        status: { type: string, const: ASSIGNED }
+        statusLabel: { type: string, const: En cours }
+        statusGroup: { type: string, const: in_progress }
+        assignedAt: { type: string, format: date-time }
     DriverLocationInput:
       type: object
       required: [driverId, latitude, longitude, accuracy]

@@ -12,7 +12,16 @@ final readonly class DeliveryAssignmentService
     {
     }
 
-    /** @return array{deliveryId: string, driverId: int, status: string, assignedAt: string} */
+    /**
+     * @return array{
+     *     deliveryId: string,
+     *     driverId: int,
+     *     status: string,
+     *     statusLabel: string,
+     *     statusGroup: string,
+     *     assignedAt: string
+     * }
+     */
     public function accept(string $deliveryPublicId, int $driverId): array
     {
         return $this->db->transactional(function () use ($deliveryPublicId, $driverId): array {
@@ -24,7 +33,7 @@ final readonly class DeliveryAssignmentService
                         status = 'ASSIGNED',
                         updated_at = now()
                     WHERE public_id = :publicId
-                      AND status = 'CONFIRMED'
+                      AND status IN ('QUOTED', 'CONFIRMED')
                       AND assigned_driver_id IS NULL
                     RETURNING id, public_id, status, assigned_at
                     SQL,
@@ -56,6 +65,8 @@ final readonly class DeliveryAssignmentService
                 'deliveryId' => (string) $delivery['public_id'],
                 'driverId' => $driverId,
                 'status' => (string) $delivery['status'],
+                'statusLabel' => 'En cours',
+                'statusGroup' => 'in_progress',
                 'assignedAt' => (string) $delivery['assigned_at'],
             ];
         });

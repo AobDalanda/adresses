@@ -10,6 +10,12 @@ services:
     env_file:
       - .env.prod.local
 
+    environment:
+      FIREBASE_CREDENTIALS: /run/secrets/firebase_credentials
+
+    secrets:
+      - firebase_credentials
+
     networks:
       - web
       - internal
@@ -37,6 +43,13 @@ services:
       - --format=json
     env_file:
       - .env.prod.local
+
+    environment:
+      FIREBASE_CREDENTIALS: /run/secrets/firebase_credentials
+
+    secrets:
+      - firebase_credentials
+
     networks:
       - internal
 
@@ -46,3 +59,7 @@ networks:
 
   internal:
     external: true
+
+secrets:
+  firebase_credentials:
+    file: ./config/firebase/service-account.json

@@ -130,6 +130,11 @@ final class DeliveryCreateServiceTest extends TestCase
                     return 1;
                 }
 
+                if (str_contains($sql, 'FROM user_account')) {
+                    // A back-office account using the mobile app is billed as a client.
+                    return 'admin';
+                }
+
                 if (str_contains($sql, 'FROM customer_types')) {
                     return false;
                 }

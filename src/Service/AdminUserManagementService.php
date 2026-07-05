@@ -130,10 +130,12 @@ final class AdminUserManagementService
                 if ($type === 'PRESTATAIRE') {
                     $updates = [];
                     $providerParameters = ['userId' => $id];
+                    $providerTypes = ['userId' => ParameterType::INTEGER];
                     foreach (['canDeliver' => 'can_deliver', 'canTransportPeople' => 'can_transport_people'] as $input => $column) {
                         if (array_key_exists($input, $payload)) {
                             $updates[] = $column.' = :'.$input;
                             $providerParameters[$input] = $this->boolean($payload[$input]);
+                            $providerTypes[$input] = ParameterType::BOOLEAN;
                         }
                     }
                     if ($updates !== []) {
@@ -148,7 +150,11 @@ final class AdminUserManagementService
                             throw new \InvalidArgumentException('Au moins une activité prestataire est obligatoire.');
                         }
                         $updates[] = 'updated_at = now()';
-                        $this->db->executeStatement('UPDATE provider_profile SET '.implode(', ', $updates).' WHERE user_id = :userId', $providerParameters);
+                        $this->db->executeStatement(
+                            'UPDATE provider_profile SET '.implode(', ', $updates).' WHERE user_id = :userId',
+                            $providerParameters,
+                            $providerTypes,
+                        );
                     }
                 }
             });

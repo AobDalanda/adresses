@@ -2,6 +2,29 @@
 
 Toutes les routes sont versionnees sous `/api/v1` et exigent un JWT.
 
+## Acceptation d'une livraison
+
+```http
+POST /api/v1/deliveries/{deliveryId}/accept
+Authorization: Bearer <jwt>
+```
+
+Le JWT doit appartenir a un livreur autorise. L'acceptation fait passer la
+livraison de `QUOTED` ou `CONFIRMED` a `ASSIGNED`, et l'API expose ce nouvel
+etat sous le libelle `En cours`. La prise est atomique: si un autre livreur a
+deja accepte la livraison, l'API renvoie `409 DELIVERY_NOT_AVAILABLE`.
+
+```json
+{
+  "deliveryId": "01975aa9-df9c-7b25-b797-6b1ca912e68f",
+  "driverId": 15,
+  "status": "ASSIGNED",
+  "statusLabel": "En cours",
+  "statusGroup": "in_progress",
+  "assignedAt": "2026-07-01 10:30:00+00"
+}
+```
+
 ## Envoi Android
 
 ```http

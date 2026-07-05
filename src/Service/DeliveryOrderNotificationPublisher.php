@@ -164,9 +164,9 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                 SELECT DISTINCT account.id AS user_id, device.token
                 FROM user_account account
                 JOIN provider_profile profile ON profile.user_id = account.id
-                JOIN provider_authorization authorization
-                    ON authorization.provider_profile_id = profile.id
-                   AND authorization.status = 'ACTIVE'
+                JOIN provider_authorization provider_auth
+                    ON provider_auth.provider_profile_id = profile.id
+                   AND provider_auth.status = 'ACTIVE'
                 LEFT JOIN user_push_device device
                     ON device.user_id = account.id
                    AND device.enabled = TRUE
