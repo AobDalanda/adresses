@@ -6,7 +6,7 @@ namespace App\Tests\Api\Controller;
 
 use App\Api\Controller\UploadFileAction;
 use App\Service\AccountDocumentStorage;
-use App\Service\DeliveryPackageUploadService;
+use App\Service\DeliveryAssetUploadService;
 use App\Service\JwtAuthService;
 use App\Service\ProfilePhotoStorage;
 use App\Service\UploadedFileSecurityValidator;
@@ -34,7 +34,7 @@ final class UploadFileActionTest extends TestCase
             new UploadedFileSecurityValidator(),
         );
         $db = $this->createMock(Connection::class);
-        $deliveryUploads = new DeliveryPackageUploadService($db, $uploads);
+        $deliveryUploads = new DeliveryAssetUploadService($db, $uploads);
 
         $jwt->expects(self::once())
             ->method('decodeFromRequest')
@@ -81,7 +81,7 @@ final class UploadFileActionTest extends TestCase
             new UploadedFileSecurityValidator(),
         );
         $db = $this->createMock(Connection::class);
-        $deliveryUploads = new DeliveryPackageUploadService($db, $uploads);
+        $deliveryUploads = new DeliveryAssetUploadService($db, $uploads);
 
         $jwt->expects(self::once())
             ->method('decodeFromRequest')

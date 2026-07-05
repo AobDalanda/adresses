@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Enum\DeliveryPaymentStatus;
 use App\Dto\Pricing\PricingRequest;
 use App\Entity\UserAccount;
 use App\Exception\NoActiveSubscriptionException;
@@ -265,6 +266,38 @@ final class DeliveryCreateService
 
             $this->db->executeStatement(
                 <<<'SQL'
+                    INSERT INTO delivery_payment (
+                        delivery_order_id,
+                        amount,
+                        currency,
+                        status,
+                        payment_method,
+                        provider_reference,
+                        paid_at,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (
+                        :deliveryOrderId,
+                        :amount,
+                        :currency,
+                        'PENDING',
+                        NULL,
+                        NULL,
+                        NULL,
+                        now(),
+                        now()
+                    )
+                    SQL,
+                [
+                    'deliveryOrderId' => $orderId,
+                    'amount' => $pricing->totalPrice,
+                    'currency' => $pricing->currency,
+                ]
+            );
+
+            $this->db->executeStatement(
+                <<<'SQL'
                     INSERT INTO delivery_status_history (
                         delivery_order_id,
                         status,
@@ -327,6 +360,13 @@ final class DeliveryCreateService
                 'totalAmount' => $pricing->totalPrice,
                 'currency' => $pricing->currency,
                 'details' => $pricing->toArray(),
+            ],
+            'payment' => [
+                'amount' => $pricing->totalPrice,
+                'currency' => $pricing->currency,
+                'status' => DeliveryPaymentStatus::PENDING->value,
+                'paidAt' => null,
+                'method' => null,
             ],
             'scheduledAt' => ($payload['scheduledAt'] ?? null)?->format(\DATE_ATOM),
             'notes' => $payload['notes'] ?? null,

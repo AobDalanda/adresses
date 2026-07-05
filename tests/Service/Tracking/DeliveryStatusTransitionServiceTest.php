@@ -90,7 +90,23 @@ final class DeliveryStatusTransitionServiceTest extends TestCase
             15,
             'DELIVERED',
             null,
-            ['deliveryPhotoAssetId' => 502],
+            [
+                'receptionCode' => '456789',
+                'deliveryPhotoAssetId' => 502,
+            ],
         );
+    }
+
+    public function testNonDeliveredTransitionRejectsProofPayload(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $service = new DeliveryStatusTransitionService($db);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('delivery proof fields are only allowed when status=DELIVERED');
+
+        $service->assertProofPayloadAllowed('PICKED_UP', [
+            'deliveryPhotoAssetId' => 502,
+        ]);
     }
 }

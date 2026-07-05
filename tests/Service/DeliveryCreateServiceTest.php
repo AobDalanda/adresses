@@ -107,7 +107,7 @@ final class DeliveryCreateServiceTest extends TestCase
             });
 
         $executedStatements = [];
-        $db->expects(self::exactly(4))
+        $db->expects(self::exactly(5))
             ->method('executeStatement')
             ->willReturnCallback(static function (string $sql, array $params = []) use (&$executedStatements): int {
                 $executedStatements[] = $sql;
@@ -177,8 +177,10 @@ final class DeliveryCreateServiceTest extends TestCase
         self::assertSame(987, $result['package']['photoAssetId']);
         self::assertSame('224620123456', $result['recipient']['phone']);
         self::assertSame(1500, $result['pricing']['totalAmount']);
+        self::assertSame('pending', $result['payment']['status']);
         self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_package'));
         self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_pricing_snapshot'));
+        self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_payment'));
         self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_status_history'));
         self::assertTrue($this->statementExecuted($executedStatements, 'UPDATE uploaded_asset'));
     }
@@ -369,10 +371,13 @@ final class DeliveryCreateServiceTest extends TestCase
             ],
         );
         $insertParams = null;
-        $db->expects(self::exactly(2))
+        $db->expects(self::exactly(3))
             ->method('executeStatement')
             ->willReturnCallback(static function (string $sql, array $params = []) use (&$insertParams): int {
                 if (str_contains($sql, 'INSERT INTO delivery_pricing_snapshot')) {
+                    return 1;
+                }
+                if (str_contains($sql, 'INSERT INTO delivery_payment')) {
                     return 1;
                 }
                 if (str_contains($sql, 'INSERT INTO delivery_status_history')) {

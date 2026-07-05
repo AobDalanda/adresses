@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Enum\DeliveryPaymentStatus;
+use App\Enum\DriverSettlementStatus;
 use Doctrine\DBAL\Connection;
 
 final readonly class MissionOverviewService
@@ -132,44 +134,55 @@ final readonly class MissionOverviewService
             'pickedUpAt' => $row['started_at'] !== null ? (string) $row['started_at'] : null,
             'deliveredAt' => $row['completed_at'] !== null ? (string) $row['completed_at'] : null,
         ];
+        $signatureRequired = (bool) ($row['package_signature_required'] ?? false);
+        $hasSignature = $row['proof_signature_asset_id'] !== null;
+        $hasDeliveryPhoto = $row['proof_delivery_photo_asset_id'] !== null;
+        $hasReceptionCode = $row['proof_reception_code'] !== null && trim((string) $row['proof_reception_code']) !== '';
+        $proofAvailable = $hasDeliveryPhoto && $hasReceptionCode && (!$signatureRequired || $hasSignature);
+        $signatureUrl = $this->assetUrl($row['proof_signature_bucket'] ?? null, $row['proof_signature_object_key'] ?? null);
+        $deliveryPhotoUrl = $this->assetUrl($row['proof_photo_bucket'] ?? null, $row['proof_photo_object_key'] ?? null);
+        $proofStatus = $row['delivery_status'] !== 'DELIVERED'
+            ? 'pending'
+            : (!$proofAvailable ? 'missing' : (($hasSignature && $signatureUrl === null) || ($hasDeliveryPhoto && $deliveryPhotoUrl === null) ? 'stored_unavailable' : 'available'));
         $mission['deliveryProof'] = [
-            'status' => $row['delivery_status'] === 'DELIVERED' ? 'available' : 'pending',
+            'status' => $proofStatus,
             'receptionCode' => $row['proof_reception_code'] !== null ? (string) $row['proof_reception_code'] : null,
             'recipientName' => $row['proof_recipient_name'] !== null ? (string) $row['proof_recipient_name'] : null,
             'recipientSignature' => [
-                'required' => (bool) ($row['package_signature_required'] ?? false),
-                'signed' => $row['proof_signature_asset_id'] !== null,
+                'required' => $signatureRequired,
+                'signed' => $hasSignature,
                 'signedAt' => $row['proof_signed_at'] !== null ? (string) $row['proof_signed_at'] : null,
                 'assetId' => $row['proof_signature_asset_id'] !== null ? (int) $row['proof_signature_asset_id'] : null,
-                'url' => $this->assetUrl($row['proof_signature_bucket'] ?? null, $row['proof_signature_object_key'] ?? null),
+                'url' => $signatureUrl,
             ],
             'deliveryPhoto' => [
-                'required' => true,
-                'captured' => $row['proof_delivery_photo_asset_id'] !== null,
+                'required' => $row['delivery_status'] === 'DELIVERED',
+                'captured' => $hasDeliveryPhoto,
                 'capturedAt' => $row['proof_photo_captured_at'] !== null ? (string) $row['proof_photo_captured_at'] : null,
                 'assetId' => $row['proof_delivery_photo_asset_id'] !== null ? (int) $row['proof_delivery_photo_asset_id'] : null,
-                'url' => $this->assetUrl($row['proof_photo_bucket'] ?? null, $row['proof_photo_object_key'] ?? null),
+                'url' => $deliveryPhotoUrl,
             ],
         ];
         $mission['payment'] = [
-            'amount' => $row['pricing_total_amount'] !== null ? (string) $row['pricing_total_amount'] : null,
-            'currency' => $row['pricing_currency'] !== null ? (string) $row['pricing_currency'] : null,
-            'status' => $row['earning_settlement_status'] !== null
-                ? strtolower((string) $row['earning_settlement_status'])
-                : ($row['delivery_status'] === 'DELIVERED' ? 'settlement_pending' : 'pending'),
-            'paidAt' => $row['earning_settled_at'] !== null ? (string) $row['earning_settled_at'] : null,
+            'amount' => $row['payment_amount'] !== null ? (string) $row['payment_amount'] : null,
+            'currency' => $row['payment_currency'] !== null ? (string) $row['payment_currency'] : null,
+            'status' => $this->deliveryPaymentStatus($row),
+            'paidAt' => $row['payment_paid_at'] !== null ? (string) $row['payment_paid_at'] : null,
+            'method' => $row['payment_method'] !== null ? (string) $row['payment_method'] : null,
             'breakdown' => [
                 'baseAmount' => $row['pricing_base_amount'] !== null ? (string) $row['pricing_base_amount'] : null,
                 'surchargeAmount' => $row['pricing_surcharge_amount'] !== null ? (string) $row['pricing_surcharge_amount'] : null,
                 'totalAmount' => $row['pricing_total_amount'] !== null ? (string) $row['pricing_total_amount'] : null,
             ],
-            'driverEarning' => [
-                'amount' => $mission['earning']['amount'],
-                'estimatedAmount' => $mission['earning']['estimatedAmount'],
-                'finalAmount' => $mission['earning']['finalAmount'],
-                'currency' => $mission['earning']['currency'],
-                'isEstimated' => $mission['earning']['isEstimated'],
-            ],
+        ];
+        $mission['driverSettlement'] = [
+            'amount' => $mission['earning']['amount'],
+            'estimatedAmount' => $mission['earning']['estimatedAmount'],
+            'finalAmount' => $mission['earning']['finalAmount'],
+            'currency' => $mission['earning']['currency'],
+            'status' => $this->driverSettlementStatus($row),
+            'settledAt' => $row['earning_settled_at'] !== null ? (string) $row['earning_settled_at'] : null,
+            'isEstimated' => $mission['earning']['isEstimated'],
         ];
         $mission['history'] = array_map(
             static fn (array $entry): array => [
@@ -237,6 +250,11 @@ final readonly class MissionOverviewService
                 pricing.surcharge_amount AS pricing_surcharge_amount,
                 pricing.total_amount AS pricing_total_amount,
                 pricing.currency AS pricing_currency,
+                payment.amount AS payment_amount,
+                payment.currency AS payment_currency,
+                payment.status AS payment_status,
+                payment.payment_method AS payment_method,
+                payment.paid_at AS payment_paid_at,
                 earning.estimated_amount,
                 earning.final_amount,
                 earning.currency AS earning_currency,
@@ -261,6 +279,7 @@ final readonly class MissionOverviewService
             LEFT JOIN service_types service_type ON service_type.code = delivery.service_type_code
             LEFT JOIN delivery_package package ON package.delivery_order_id = delivery.id
             LEFT JOIN delivery_pricing_snapshot pricing ON pricing.delivery_order_id = delivery.id
+            LEFT JOIN delivery_payment payment ON payment.delivery_order_id = delivery.id
             LEFT JOIN delivery_driver_earning earning ON earning.delivery_order_id = delivery.id
             LEFT JOIN delivery_proof proof ON proof.delivery_order_id = delivery.id
             LEFT JOIN uploaded_asset signature_asset ON signature_asset.id = proof.recipient_signature_asset_id
@@ -478,5 +497,31 @@ final readonly class MissionOverviewService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /** @param array<string, mixed> $row */
+    private function driverSettlementStatus(array $row): string
+    {
+        $settlementStatus = DriverSettlementStatus::fromDatabase(
+            is_string($row['earning_settlement_status'] ?? null) ? (string) $row['earning_settlement_status'] : null
+        );
+        if ($settlementStatus !== null) {
+            return $settlementStatus->value;
+        }
+
+        return DriverSettlementStatus::PENDING->value;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function deliveryPaymentStatus(array $row): string
+    {
+        $paymentStatus = DeliveryPaymentStatus::fromDatabase(
+            is_string($row['payment_status'] ?? null) ? (string) $row['payment_status'] : null
+        );
+        if ($paymentStatus !== null) {
+            return $paymentStatus->value;
+        }
+
+        return 'unknown';
     }
 }

@@ -2,7 +2,7 @@
 
 namespace App\Api\Controller;
 
-use App\Service\DeliveryPackageUploadService;
+use App\Service\DeliveryAssetUploadService;
 use App\Service\JwtAuthService;
 use App\Service\UploadStorageService;
 use Psr\Log\LoggerInterface;
@@ -15,7 +15,7 @@ final class UploadFileAction
     public function __construct(
         private readonly JwtAuthService $jwt,
         private readonly UploadStorageService $uploads,
-        private readonly DeliveryPackageUploadService $deliveryPackageUploads,
+        private readonly DeliveryAssetUploadService $deliveryAssetUploads,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -44,7 +44,7 @@ final class UploadFileAction
                     return new JsonResponse(['message' => 'Unauthorized'], 401);
                 }
 
-                $stored = $this->deliveryPackageUploads->upload((int) $auth['uid'], $file, $normalizedCategory);
+                $stored = $this->deliveryAssetUploads->upload((int) $auth['uid'], $file, $normalizedCategory);
 
                 return new JsonResponse([
                     'success' => true,

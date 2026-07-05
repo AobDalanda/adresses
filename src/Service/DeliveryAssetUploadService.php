@@ -6,7 +6,7 @@ use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\Uid\Uuid;
 
-final class DeliveryPackageUploadService
+final class DeliveryAssetUploadService
 {
     private const DELIVERY_UPLOAD_CATEGORIES = [
         'package_photo' => ['purpose' => 'DELIVERY_ORDER', 'allowedCategories' => '["package_photo"]'],

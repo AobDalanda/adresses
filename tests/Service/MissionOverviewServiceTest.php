@@ -60,6 +60,11 @@ final class MissionOverviewServiceTest extends TestCase
         $row['proof_signature_object_key'] = 'delivery-proofs/signature.png';
         $row['proof_photo_bucket'] = 'private';
         $row['proof_photo_object_key'] = 'delivery-proofs/photo.png';
+        $row['payment_amount'] = '12500.00';
+        $row['payment_currency'] = 'GNF';
+        $row['payment_status'] = 'PAID';
+        $row['payment_method'] = 'orange_money';
+        $row['payment_paid_at'] = '2026-07-05T11:03:00+00:00';
 
         $db = $this->createMock(Connection::class);
         $db->expects(self::once())
@@ -95,16 +100,63 @@ final class MissionOverviewServiceTest extends TestCase
         self::assertFalse($mission['earning']['isEstimated']);
         self::assertSame('DELIVERED', $mission['history'][0]['status']);
         self::assertSame(8.4, $mission['summary']['distanceKm']);
-        self::assertSame('7000.00', $mission['payment']['driverEarning']['amount']);
         self::assertSame('12500.00', $mission['payment']['amount']);
         self::assertSame('paid', $mission['payment']['status']);
-        self::assertSame('2026-07-05T11:05:00+00:00', $mission['payment']['paidAt']);
+        self::assertSame('2026-07-05T11:03:00+00:00', $mission['payment']['paidAt']);
+        self::assertSame('orange_money', $mission['payment']['method']);
+        self::assertSame('7000.00', $mission['driverSettlement']['amount']);
+        self::assertSame('paid', $mission['driverSettlement']['status']);
+        self::assertSame('2026-07-05T11:05:00+00:00', $mission['driverSettlement']['settledAt']);
         self::assertSame('available', $mission['deliveryProof']['status']);
         self::assertTrue($mission['deliveryProof']['recipientSignature']['required']);
         self::assertSame('456789', $mission['deliveryProof']['receptionCode']);
         self::assertSame('M. Camara', $mission['deliveryProof']['recipientName']);
         self::assertSame('https://cdn.test/signature', $mission['deliveryProof']['recipientSignature']['url']);
         self::assertSame('https://cdn.test/photo', $mission['deliveryProof']['deliveryPhoto']['url']);
+    }
+
+    public function testDeliveredMissionWithoutCompleteProofIsReportedAsMissing(): void
+    {
+        $row = $this->missionRow();
+        $row['mission_status'] = 'terminee';
+        $row['delivery_status'] = 'DELIVERED';
+        $row['completed_at'] = '2026-07-05T11:00:00+00:00';
+
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())->method('fetchAssociative')->willReturn($row);
+        $db->expects(self::once())->method('fetchAllAssociative')->willReturn([]);
+
+        $mission = (new MissionOverviewService($db))->detailForDriver(42, (string) $row['public_id']);
+
+        self::assertSame('missing', $mission['deliveryProof']['status']);
+        self::assertFalse($mission['deliveryProof']['deliveryPhoto']['captured']);
+        self::assertSame('unknown', $mission['payment']['status']);
+        self::assertSame('pending', $mission['driverSettlement']['status']);
+    }
+
+    public function testStoredProofWithoutSignedUrlsIsReportedAsStoredUnavailable(): void
+    {
+        $row = $this->missionRow();
+        $row['mission_status'] = 'terminee';
+        $row['delivery_status'] = 'DELIVERED';
+        $row['completed_at'] = '2026-07-05T11:00:00+00:00';
+        $row['proof_reception_code'] = '456789';
+        $row['proof_signature_asset_id'] = 501;
+        $row['proof_delivery_photo_asset_id'] = 502;
+        $row['proof_signature_bucket'] = 'private';
+        $row['proof_signature_object_key'] = 'delivery-proofs/signature.png';
+        $row['proof_photo_bucket'] = 'private';
+        $row['proof_photo_object_key'] = 'delivery-proofs/photo.png';
+
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::once())->method('fetchAssociative')->willReturn($row);
+        $db->expects(self::once())->method('fetchAllAssociative')->willReturn([]);
+        $storage = $this->createMock(\App\Service\SupabaseStorageClient::class);
+        $storage->expects(self::exactly(2))->method('createSignedUrl')->willThrowException(new \RuntimeException('signed url failed'));
+
+        $mission = (new MissionOverviewService($db, $storage))->detailForDriver(42, (string) $row['public_id']);
+
+        self::assertSame('stored_unavailable', $mission['deliveryProof']['status']);
     }
 
     /** @return array{status: string, page: int, perPage: int, sort: string, dateFrom: ?string, dateTo: ?string} */
@@ -156,6 +208,11 @@ final class MissionOverviewServiceTest extends TestCase
             'pricing_surcharge_amount' => '1500.00',
             'pricing_total_amount' => '12500.00',
             'pricing_currency' => 'GNF',
+            'payment_amount' => null,
+            'payment_currency' => null,
+            'payment_status' => null,
+            'payment_method' => null,
+            'payment_paid_at' => null,
             'estimated_amount' => '6500.00',
             'final_amount' => null,
             'earning_currency' => 'GNF',

@@ -133,11 +133,38 @@ final readonly class DeliveryStatusTransitionService
     /** @param array{receptionCode: ?string, recipientName: ?string, recipientSignatureAssetId: ?int, deliveryPhotoAssetId: ?int} $proof */
     private function assertDeliveryProof(array $proof, bool $signatureRequired): void
     {
+        if ($proof['receptionCode'] === null) {
+            throw new \InvalidArgumentException('receptionCode est requis');
+        }
         if ($signatureRequired && $proof['recipientSignatureAssetId'] === null) {
             throw new \InvalidArgumentException('recipientSignatureAssetId est requis');
         }
         if ($proof['deliveryPhotoAssetId'] === null) {
             throw new \InvalidArgumentException('deliveryPhotoAssetId est requis');
+        }
+    }
+
+    /** @param array<string, mixed> $proof */
+    public function assertProofPayloadAllowed(string $targetStatus, array $proof): void
+    {
+        if ($targetStatus === 'DELIVERED') {
+            return;
+        }
+
+        foreach (['receptionCode', 'recipientName'] as $field) {
+            $value = $proof[$field] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                throw new \InvalidArgumentException('delivery proof fields are only allowed when status=DELIVERED');
+            }
+            if ($value !== null && !is_string($value)) {
+                throw new \InvalidArgumentException('delivery proof fields are only allowed when status=DELIVERED');
+            }
+        }
+
+        foreach (['recipientSignatureAssetId', 'deliveryPhotoAssetId'] as $field) {
+            if (($proof[$field] ?? null) !== null) {
+                throw new \InvalidArgumentException('delivery proof fields are only allowed when status=DELIVERED');
+            }
         }
     }
 

@@ -61,10 +61,12 @@ final readonly class DeliveryUpdateStatusAction
         }
 
         try {
+            $normalizedStatus = strtoupper(trim($status));
+            $this->transitions->assertProofPayloadAllowed($normalizedStatus, $proof);
             $result = $this->transitions->transition(
                 $publicId,
                 $identity->userId,
-                strtoupper(trim($status)),
+                $normalizedStatus,
                 $comment !== null ? trim($comment) : null,
                 [
                     'receptionCode' => is_string($proof['receptionCode']) ? trim($proof['receptionCode']) : null,
