@@ -136,11 +136,13 @@ final class UpdateConnectedUserAddressService
 
             $weightedLocationId = (int) $this->db->fetchOne(
                 "
-                INSERT INTO gps_weighted_location (final_geom, confidence_score, points_used)
+                INSERT INTO gps_weighted_location (final_geom, confidence_score, points_used, accuracy_m, source)
                 VALUES (
                     ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
                     :confidence,
-                    1
+                    1,
+                    :accuracy,
+                    :source
                 )
                 RETURNING id
                 ",
@@ -148,7 +150,14 @@ final class UpdateConnectedUserAddressService
                     'lat' => $latitude,
                     'lng' => $longitude,
                     'confidence' => $this->computeConfidenceScore($accuracy),
+                    'accuracy' => $accuracy,
+                    'source' => $source,
                 ]
+            );
+
+            $this->db->executeStatement(
+                'INSERT INTO gps_weighted_location_point (weighted_location_id, gps_raw_point_id) VALUES (:weightedId, :pointId)',
+                ['weightedId' => $weightedLocationId, 'pointId' => $gpsPointId]
             );
 
             $cellCode = $this->generateCellCode($latitude, $longitude);

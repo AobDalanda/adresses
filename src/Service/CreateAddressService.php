@@ -52,7 +52,7 @@ final class CreateAddressService
 
             $rawPoints = $this->db->fetchAllAssociative(
                 "
-                SELECT latitude, longitude, accuracy_m
+                SELECT latitude, longitude, accuracy_m, source
                 FROM gps_raw_point
                 WHERE id = ANY(:ids)
                 ",
@@ -60,16 +60,24 @@ final class CreateAddressService
                 ['ids' => ArrayParameterType::INTEGER]
             );
 
-            [$lat, $lng, $confidenceScore] = $this->computeWeightedFromDb($rawPoints);
+            [$lat, $lng, $confidenceScore, $weightedAccuracy] = $this->computeWeightedFromDb($rawPoints);
+
+            $sources = array_values(array_unique(array_map(
+                static fn (array $point): string => (string) ($point['source'] ?? 'unknown'),
+                $rawPoints
+            )));
+            $weightedSource = count($sources) === 1 ? $sources[0] : 'mixed';
 
             $weightedId = (int) $this->db->fetchOne(
                 "
                 INSERT INTO gps_weighted_location
-                    (final_geom, confidence_score, points_used)
+                    (final_geom, confidence_score, points_used, accuracy_m, source)
                 VALUES (
                     ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
                     :score,
-                    :pts
+                    :pts,
+                    :accuracy,
+                    :source
                 )
                 RETURNING id
                 ",
@@ -78,8 +86,17 @@ final class CreateAddressService
                     'lng' => $lng,
                     'score' => $confidenceScore,
                     'pts' => $pointsUsed,
+                    'accuracy' => $weightedAccuracy,
+                    'source' => $weightedSource,
                 ]
             );
+
+            foreach ($gpsPointIds as $gpsPointId) {
+                $this->db->executeStatement(
+                    'INSERT INTO gps_weighted_location_point (weighted_location_id, gps_raw_point_id) VALUES (:weightedId, :pointId)',
+                    ['weightedId' => $weightedId, 'pointId' => $gpsPointId]
+                );
+            }
 
             $cellCode = $this->generateCellCode($lat, $lng);
 
@@ -178,7 +195,7 @@ final class CreateAddressService
 
     /**
      * @param array<int, array{latitude: float, longitude: float, accuracy_m: ?float}> $points
-     * @return array{0: float, 1: float, 2: float}
+     * @return array{0: float, 1: float, 2: float, 3: float}
      */
     private function computeWeightedFromDb(array $points): array
     {
@@ -216,7 +233,7 @@ final class CreateAddressService
             )
         );
 
-        return [$lat, $lng, $confidence];
+        return [$lat, $lng, $confidence, (float) $avgAccuracy];
     }
 
     private function generateCellCode(float $lat, float $lng): string
