@@ -117,6 +117,11 @@ final class DeliveryCreateServiceTest extends TestCase
                     return 1;
                 }
 
+                if (str_contains($sql, 'INSERT INTO delivery_package')) {
+                    self::assertSame('false', $params['fragile']);
+                    self::assertSame('false', $params['signatureRequired']);
+                }
+
                 return 1;
             });
 

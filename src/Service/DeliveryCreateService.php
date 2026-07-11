@@ -192,8 +192,8 @@ final class DeliveryCreateService
                         'lengthCm' => $package['lengthCm'] ?? null,
                         'widthCm' => $package['widthCm'] ?? null,
                         'heightCm' => $package['heightCm'] ?? null,
-                        'fragile' => $package['fragile'] ?? false,
-                        'signatureRequired' => $package['signatureRequired'] ?? false,
+                        'fragile' => ($package['fragile'] ?? false) ? 'true' : 'false',
+                        'signatureRequired' => ($package['signatureRequired'] ?? false) ? 'true' : 'false',
                         'photoAssetId' => $package['photoAssetId'] ?? null,
                         ]
                 );
