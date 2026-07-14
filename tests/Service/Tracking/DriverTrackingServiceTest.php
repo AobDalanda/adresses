@@ -22,6 +22,7 @@ final class DriverTrackingServiceTest extends TestCase
         $repository = $this->createMock(DriverLocationRepositoryInterface::class);
         $publisher = $this->createMock(LocationPublisherInterface::class);
         $repository->expects(self::once())->method('save')->with(self::isInstanceOf(DriverLocation::class));
+        $repository->method('findLastForDriver')->willReturn(null);
         $publisher->expects(self::once())->method('publish')->willReturn(true);
 
         $db = $this->trackingConnection();
@@ -40,11 +41,14 @@ final class DriverTrackingServiceTest extends TestCase
             18.5,
             220.0,
             74,
-            'gps'
+            'gps',
+            new \DateTimeImmutable('-10 seconds'),
+            false
         ));
 
         self::assertSame(15, $output->driverId);
         self::assertSame(-13.5784, $output->longitude);
+        self::assertSame('fresh', $output->freshness);
     }
 
     public function testReturnsHistoryDtos(): void
@@ -65,6 +69,7 @@ final class DriverTrackingServiceTest extends TestCase
         self::assertCount(1, $history);
         self::assertSame(15, $history[0]->driverId);
         self::assertSame('gps', $history[0]->source);
+        self::assertSame('fresh', $history[0]->freshness);
     }
 
     public function testDelegatesPostgisAnalytics(): void
@@ -83,6 +88,35 @@ final class DriverTrackingServiceTest extends TestCase
 
         self::assertSame(1250.4, $service->calculateDistance(15));
         self::assertSame(21.5, $service->calculateAverageSpeed(15));
+    }
+
+    public function testRejectsLocationThatIsTooOld(): void
+    {
+        $repository = $this->createMock(DriverLocationRepositoryInterface::class);
+        $repository->method('findLastForDriver')->willReturn(null);
+
+        $service = new DriverTrackingService(
+            $repository,
+            $this->createMock(LocationPublisherInterface::class),
+            new DeliveryTrackingService($db = $this->trackingConnection()),
+            $db,
+            new NullLogger(),
+        );
+
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage('recordedAt est trop ancien');
+        $service->saveLocation(new DriverLocationInput(
+            15,
+            9.6412,
+            -13.5784,
+            5.3,
+            null,
+            null,
+            null,
+            'gps',
+            new \DateTimeImmutable('-10 minutes'),
+            false
+        ));
     }
 
     private function trackingConnection(): Connection

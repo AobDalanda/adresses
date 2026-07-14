@@ -17,7 +17,11 @@ final readonly class DriverLocationHistoryItem
         public ?float $heading,
         public ?int $batteryLevel,
         public string $source,
-        public string $createdAt
+        public string $recordedAt,
+        public string $receivedAt,
+        public string $freshness,
+        public bool $isMocked,
+        public bool $isSuspect
     ) {
     }
 
@@ -40,7 +44,11 @@ final readonly class DriverLocationHistoryItem
             $location->getHeading(),
             $location->getBatteryLevel(),
             $location->getSource(),
-            $location->getCreatedAt()->format(\DateTimeInterface::ATOM)
+            $location->getRecordedAt()->format(\DateTimeInterface::ATOM),
+            $location->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            DriverLocationOutput::fromEntity($location)->freshness,
+            $location->isMocked(),
+            $location->isSuspect()
         );
     }
 }

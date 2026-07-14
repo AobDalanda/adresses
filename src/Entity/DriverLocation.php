@@ -42,6 +42,15 @@ class DriverLocation
     #[ORM\Column(length: 30)]
     private string $source;
 
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private \DateTimeImmutable $recordedAt;
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $isMocked;
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $isSuspect;
+
     #[ORM\Column(type: 'geography', options: ['geometry_type' => 'POINT', 'srid' => 4326])]
     private string $position;
 
@@ -57,8 +66,13 @@ class DriverLocation
         ?float $heading,
         ?int $batteryLevel,
         string $source,
+        ?\DateTimeImmutable $recordedAt = null,
+        bool $isMocked = false,
+        bool $isSuspect = false,
         ?\DateTimeImmutable $createdAt = null
     ) {
+        $receivedAt = $createdAt ?? new \DateTimeImmutable();
+
         $this->driverId = $driverId;
         $this->latitude = $latitude;
         $this->longitude = $longitude;
@@ -67,8 +81,11 @@ class DriverLocation
         $this->heading = $heading;
         $this->batteryLevel = $batteryLevel;
         $this->source = $source;
+        $this->recordedAt = $recordedAt ?? $receivedAt;
+        $this->isMocked = $isMocked;
+        $this->isSuspect = $isSuspect;
         $this->position = sprintf('SRID=4326;POINT(%F %F)', $longitude, $latitude);
-        $this->createdAt = $createdAt ?? new \DateTimeImmutable();
+        $this->createdAt = $receivedAt;
     }
 
     public function getId(): ?int
@@ -114,6 +131,21 @@ class DriverLocation
     public function getSource(): string
     {
         return $this->source;
+    }
+
+    public function getRecordedAt(): \DateTimeImmutable
+    {
+        return $this->recordedAt;
+    }
+
+    public function isMocked(): bool
+    {
+        return $this->isMocked;
+    }
+
+    public function isSuspect(): bool
+    {
+        return $this->isSuspect;
     }
 
     public function getPosition(): string

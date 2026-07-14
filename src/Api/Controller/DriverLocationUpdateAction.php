@@ -58,6 +58,8 @@ final class DriverLocationUpdateAction extends AbstractDriverTrackingAction
 
         try {
             $this->tracking->saveLocation($input);
+        } catch (\DomainException $exception) {
+            return new JsonResponse(['message' => $exception->getMessage()], 422);
         } catch (\Throwable) {
             return new JsonResponse(['message' => 'Unable to save location'], 500);
         }

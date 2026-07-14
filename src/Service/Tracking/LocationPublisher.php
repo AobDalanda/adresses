@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Tracking;
 
+use App\Dto\Tracking\DriverLocationOutput;
 use App\Entity\DriverLocation;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mercure\HubInterface;
@@ -27,6 +28,12 @@ final readonly class LocationPublisher implements LocationPublisherInterface
             'accuracy' => $location->getAccuracy(),
             'speed' => $location->getSpeed(),
             'heading' => $location->getHeading(),
+            'source' => $location->getSource(),
+            'recordedAt' => $location->getRecordedAt()->format(\DateTimeInterface::ATOM),
+            'receivedAt' => $location->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'freshness' => DriverLocationOutput::fromEntity($location)->freshness,
+            'isMocked' => $location->isMocked(),
+            'isSuspect' => $location->isSuspect(),
             'timestamp' => $location->getCreatedAt()->getTimestamp(),
         ];
 

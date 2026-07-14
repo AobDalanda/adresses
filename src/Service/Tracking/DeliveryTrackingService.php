@@ -42,7 +42,7 @@ final readonly class DeliveryTrackingService
         $driverId = (int) $delivery['assigned_driver_id'];
         $location = $this->db->fetchAssociative(
             <<<'SQL'
-                SELECT latitude, longitude, accuracy, speed, heading, created_at
+                SELECT latitude, longitude, accuracy, speed, heading, source, recorded_at, is_mocked, is_suspect, created_at
                 FROM driver_location
                 WHERE driver_id = :driverId
                 ORDER BY created_at DESC, id DESC
@@ -62,6 +62,12 @@ final readonly class DeliveryTrackingService
                 'accuracy' => (float) $location['accuracy'],
                 'speed' => $location['speed'] !== null ? (float) $location['speed'] : null,
                 'heading' => $location['heading'] !== null ? (float) $location['heading'] : null,
+                'source' => (string) $location['source'],
+                'recordedAt' => (new \DateTimeImmutable((string) $location['recorded_at']))->format(\DateTimeInterface::ATOM),
+                'receivedAt' => (new \DateTimeImmutable((string) $location['created_at']))->format(\DateTimeInterface::ATOM),
+                'freshness' => $this->freshnessFor(new \DateTimeImmutable((string) $location['created_at'])),
+                'isMocked' => (bool) $location['is_mocked'],
+                'isSuspect' => (bool) $location['is_suspect'],
                 'timestamp' => (new \DateTimeImmutable((string) $location['created_at']))->getTimestamp(),
             ],
         ];
@@ -88,6 +94,12 @@ final readonly class DeliveryTrackingService
                 'accuracy' => $location->getAccuracy(),
                 'speed' => $location->getSpeed(),
                 'heading' => $location->getHeading(),
+                'source' => $location->getSource(),
+                'recordedAt' => $location->getRecordedAt()->format(\DateTimeInterface::ATOM),
+                'receivedAt' => $location->getCreatedAt()->format(\DateTimeInterface::ATOM),
+                'freshness' => $this->freshnessFor($location->getCreatedAt()),
+                'isMocked' => $location->isMocked(),
+                'isSuspect' => $location->isSuspect(),
                 'timestamp' => $location->getCreatedAt()->getTimestamp(),
             ];
             $this->db->executeStatement(
@@ -115,5 +127,16 @@ final readonly class DeliveryTrackingService
     public function topic(string $deliveryPublicId): string
     {
         return sprintf('delivery/%s/location', $deliveryPublicId);
+    }
+
+    private function freshnessFor(\DateTimeImmutable $receivedAt): string
+    {
+        $age = time() - $receivedAt->getTimestamp();
+
+        return match (true) {
+            $age < 30 => 'fresh',
+            $age < 120 => 'stale',
+            default => 'offline',
+        };
     }
 }

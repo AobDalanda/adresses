@@ -30,7 +30,9 @@ final class DriverLocationRequestMapper
             $this->optionalFloat($payload, 'speed'),
             $this->optionalFloat($payload, 'heading'),
             $this->optionalInt($payload, 'batteryLevel'),
-            $this->optionalString($payload, 'source') ?? 'gps'
+            $this->optionalString($payload, 'source') ?? 'gps',
+            $this->optionalDate($payload, 'recordedAt'),
+            $this->optionalBool($payload, 'isMocked') ?? false
         );
     }
 
@@ -118,6 +120,36 @@ final class DriverLocationRequestMapper
         }
 
         return trim($payload[$field]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function optionalDate(array $payload, string $field): ?\DateTimeImmutable
+    {
+        if (!array_key_exists($field, $payload) || $payload[$field] === null || $payload[$field] === '') {
+            return null;
+        }
+        if (!is_string($payload[$field])) {
+            throw new \InvalidArgumentException(sprintf('%s doit etre une date ISO-8601', $field));
+        }
+
+        return $this->parseDate($payload[$field], false);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function optionalBool(array $payload, string $field): ?bool
+    {
+        if (!array_key_exists($field, $payload) || $payload[$field] === null) {
+            return null;
+        }
+        if (!is_bool($payload[$field])) {
+            throw new \InvalidArgumentException(sprintf('%s doit etre un booleen', $field));
+        }
+
+        return $payload[$field];
     }
 
     private function parseDate(mixed $value, bool $endOfDay): ?\DateTimeImmutable

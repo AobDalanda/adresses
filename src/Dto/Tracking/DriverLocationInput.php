@@ -25,7 +25,9 @@ final readonly class DriverLocationInput
         public ?int $batteryLevel,
         #[Assert\NotBlank]
         #[Assert\Length(max: 30)]
-        public string $source = 'gps'
+        public string $source = 'gps',
+        public ?\DateTimeImmutable $recordedAt = null,
+        public bool $isMocked = false
     ) {
     }
 }
