@@ -21,6 +21,7 @@ final class MobileTokenRefreshServiceTest extends TestCase
                 'typ' => 'mobile_refresh',
                 'uid' => 42,
                 'tv' => 3,
+                'did' => 'device-1',
             ]);
         $jwt->expects(self::exactly(2))
             ->method('issueToken')
@@ -28,13 +29,13 @@ final class MobileTokenRefreshServiceTest extends TestCase
                 static function (array $claims, ?int $ttl = null): string {
                     if ($claims['typ'] === 'mobile') {
                         self::assertNull($ttl);
-                        self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'typ' => 'mobile'], $claims);
+                        self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'did' => 'device-1', 'typ' => 'mobile'], $claims);
 
                         return 'new-access-token';
                     }
 
                     self::assertSame(JwtAuthService::REFRESH_TOKEN_TTL_SECONDS, $ttl);
-                    self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'typ' => 'mobile_refresh'], $claims);
+                    self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'did' => 'device-1', 'typ' => 'mobile_refresh'], $claims);
 
                     return 'new-refresh-token';
                 }
@@ -58,5 +59,19 @@ final class MobileTokenRefreshServiceTest extends TestCase
         $jwt->expects(self::never())->method('issueToken');
 
         self::assertNull((new MobileTokenRefreshService($jwt))->refresh('access-token'));
+    }
+
+    public function testRefreshRejectsRefreshTokenWithoutDeviceId(): void
+    {
+        $jwt = $this->createMock(JwtAuthService::class);
+        $jwt->method('decodeToken')->willReturn([
+            'sub' => '+224620000000',
+            'typ' => 'mobile_refresh',
+            'uid' => 42,
+            'tv' => 3,
+        ]);
+        $jwt->expects(self::never())->method('issueToken');
+
+        self::assertNull((new MobileTokenRefreshService($jwt))->refresh('refresh-token-without-device'));
     }
 }

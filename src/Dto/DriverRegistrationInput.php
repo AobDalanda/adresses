@@ -29,6 +29,7 @@ final class DriverRegistrationInput
     public function __construct(
         public string $phone,
         public string $otp,
+        public string $deviceId,
         public string $signupAs,
         public string $fullName,
         public ?string $email,

@@ -33,6 +33,7 @@ final class DriverRegistrationActionNormalizationTest extends TestCase
         $input = $method->invoke($controller, [
             'phone' => '620000000',
             'otp' => '123456',
+            'deviceId' => 'device-1',
             'profile' => [
                 'signupAs' => 'livreur',
                 'fullName' => 'Mamadou Diallo',
@@ -63,6 +64,7 @@ final class DriverRegistrationActionNormalizationTest extends TestCase
         ]);
 
         self::assertInstanceOf(DriverRegistrationInput::class, $input);
+        self::assertSame('device-1', $input->deviceId);
         self::assertSame('LIVREUR', $input->signupAs);
         self::assertSame('mamadou@example.com', $input->email);
         self::assertSame('A_PIED', $input->vehicle['type']);
@@ -84,6 +86,7 @@ final class DriverRegistrationActionNormalizationTest extends TestCase
         $method->invoke($controller, [
             'phone' => '620000000',
             'otp' => '123456',
+            'deviceId' => 'device-1',
             'profile' => [
                 'signupAs' => 'LIVREUR',
                 'fullName' => str_repeat('A', 101),

@@ -78,7 +78,7 @@ final class DriverRegistrationAction
                         $input,
                         $request->getClientIp()
                     );
-                    $tokenVersion = $this->users->rotateTokenVersion((int) $user['id']);
+                    $tokenVersion = $this->users->activateMobileDevice((int) $user['id'], $input->deviceId);
 
                     return [$user, $application, $tokenVersion];
                 }
@@ -88,6 +88,7 @@ final class DriverRegistrationAction
                 'typ' => 'mobile',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'did' => $input->deviceId,
             ]);
         } catch (UniqueConstraintViolationException $exception) {
             $this->logger->warning('Driver registration uniqueness conflict', [
@@ -116,6 +117,7 @@ final class DriverRegistrationAction
                 'typ' => 'mobile_refresh',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'did' => $input->deviceId,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
             'application' => $application,
@@ -129,6 +131,9 @@ final class DriverRegistrationAction
     {
         $phone = $payload['phone'] ?? null;
         $otp = $payload['otp'] ?? null;
+        $deviceId = isset($payload['deviceId']) && is_string($payload['deviceId'])
+            ? UserAccountService::normalizeMobileDeviceId($payload['deviceId'])
+            : null;
         $profile = $payload['profile'] ?? null;
         $vehicle = $payload['vehicle'] ?? null;
         $driverLicense = $payload['driverLicense'] ?? null;
@@ -138,6 +143,10 @@ final class DriverRegistrationAction
         if (!is_string($phone) || trim($phone) === '' || !is_string($otp) || trim($otp) === '') {
             throw new \InvalidArgumentException('phone et otp sont requis');
         }
+        if ($deviceId === null) {
+            throw new \InvalidArgumentException('deviceId est requis');
+        }
+        $this->assertMaxLength($deviceId, 160, 'deviceId');
 
         if (!is_array($profile) || !is_array($vehicle) || !is_array($driverLicense) || !is_array($vehicleDocuments)) {
             throw new \InvalidArgumentException('profile, vehicle, driverLicense et vehicleDocuments sont requis');
@@ -280,6 +289,7 @@ final class DriverRegistrationAction
         return new DriverRegistrationInput(
             $normalizedPhone,
             trim($otp),
+            $deviceId,
             $signupAs,
             $fullName,
             $email,

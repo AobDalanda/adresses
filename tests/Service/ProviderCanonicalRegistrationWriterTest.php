@@ -109,6 +109,7 @@ final class ProviderCanonicalRegistrationWriterTest extends TestCase
         return new DriverRegistrationInput(
             '620000000',
             '123456',
+            'device-1',
             $signupAs,
             'Provider One',
             'provider@example.test',

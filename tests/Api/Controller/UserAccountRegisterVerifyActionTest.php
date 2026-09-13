@@ -61,6 +61,10 @@ final class UserAccountRegisterVerifyActionTest extends TestCase
                 'createdAt' => '2026-05-17 10:30:00',
             ]);
         $userAccountService->expects(self::once())->method('markPendingRegistrationVerified')->with(10);
+        $userAccountService->expects(self::once())
+            ->method('activateMobileDevice')
+            ->with(42, 'device-1')
+            ->willReturn(7);
 
         $jwt = $this->createMock(JwtAuthService::class);
         $jwt->method('issueToken')->willReturn('jwt-token');
@@ -82,6 +86,7 @@ final class UserAccountRegisterVerifyActionTest extends TestCase
         $response = $controller->__invoke(new Request(content: json_encode([
             'phone' => '620000000',
             'otp' => '123456',
+            'deviceId' => 'device-1',
         ], JSON_THROW_ON_ERROR)));
 
         self::assertSame(201, $response->getStatusCode());

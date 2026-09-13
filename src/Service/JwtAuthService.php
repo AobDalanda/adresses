@@ -63,12 +63,17 @@ class JwtAuthService
         }
 
         if (in_array($payload['typ'] ?? null, ['mobile', 'mobile_refresh'], true)) {
-            if (!isset($payload['uid'], $payload['tv'])) {
+            if (!isset($payload['uid'], $payload['tv'], $payload['did']) || !is_string($payload['did'])) {
                 return null;
             }
 
             $currentTokenVersion = $this->users->findTokenVersionById((int) $payload['uid']);
             if ($currentTokenVersion === null || $currentTokenVersion !== (int) $payload['tv']) {
+                return null;
+            }
+
+            $activeDeviceId = $this->users->findActiveMobileDeviceIdById((int) $payload['uid']);
+            if ($activeDeviceId === null || $activeDeviceId !== $payload['did']) {
                 return null;
             }
         }

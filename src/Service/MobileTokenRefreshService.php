@@ -17,7 +17,8 @@ class MobileTokenRefreshService
         if (
             !is_array($claims)
             || ($claims['typ'] ?? null) !== 'mobile_refresh'
-            || !isset($claims['uid'], $claims['tv'], $claims['sub'])
+            || !isset($claims['uid'], $claims['tv'], $claims['sub'], $claims['did'])
+            || !is_string($claims['did'])
         ) {
             return null;
         }
@@ -26,6 +27,7 @@ class MobileTokenRefreshService
             'sub' => (string) $claims['sub'],
             'uid' => (int) $claims['uid'],
             'tv' => (int) $claims['tv'],
+            'did' => $claims['did'],
         ];
 
         return [

@@ -165,6 +165,48 @@ class UserAccountService
         return (int) $tokenVersion;
     }
 
+    public function findActiveMobileDeviceIdById(int $userId): ?string
+    {
+        $deviceId = $this->db->fetchOne(
+            'SELECT active_mobile_device_id FROM user_account WHERE id = :id LIMIT 1',
+            ['id' => $userId]
+        );
+
+        if ($deviceId === false || $deviceId === null || $deviceId === '') {
+            return null;
+        }
+
+        return (string) $deviceId;
+    }
+
+    public function activateMobileDevice(int $userId, string $deviceId): int
+    {
+        $deviceId = self::normalizeMobileDeviceId($deviceId);
+        if ($deviceId === null) {
+            throw new \InvalidArgumentException('deviceId est requis');
+        }
+        if (strlen($deviceId) > 160) {
+            throw new \InvalidArgumentException('deviceId est trop long');
+        }
+
+        $tokenVersion = $this->db->fetchOne(
+            '
+            UPDATE user_account
+            SET active_mobile_device_id = :deviceId,
+                token_version = token_version + 1
+            WHERE id = :id
+            RETURNING token_version
+            ',
+            ['id' => $userId, 'deviceId' => $deviceId]
+        );
+
+        if ($tokenVersion === false) {
+            throw new \RuntimeException(sprintf('Utilisateur %d introuvable.', $userId));
+        }
+
+        return (int) $tokenVersion;
+    }
+
     public function rotateTokenVersion(int $userId): int
     {
         $tokenVersion = $this->db->fetchOne(
@@ -446,6 +488,17 @@ class UserAccountService
         }
 
         $normalized = trim(preg_replace('/\s+/', ' ', $identityDocumentNumber) ?? $identityDocumentNumber);
+
+        return $normalized === '' ? null : $normalized;
+    }
+
+    public static function normalizeMobileDeviceId(?string $deviceId): ?string
+    {
+        if ($deviceId === null) {
+            return null;
+        }
+
+        $normalized = trim($deviceId);
 
         return $normalized === '' ? null : $normalized;
     }

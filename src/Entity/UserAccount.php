@@ -49,6 +49,9 @@ class UserAccount
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
+    #[ORM\Column(length: 160, nullable: true)]
+    private ?string $activeMobileDeviceId = null;
+
     #[ORM\OneToOne(mappedBy: 'user', targetEntity: ProviderProfile::class)]
     private ?ProviderProfile $providerProfile = null;
 
@@ -152,6 +155,18 @@ class UserAccount
     public function getCreatedAt(): \DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getActiveMobileDeviceId(): ?string
+    {
+        return $this->activeMobileDeviceId;
+    }
+
+    public function setActiveMobileDeviceId(?string $activeMobileDeviceId): self
+    {
+        $this->activeMobileDeviceId = $activeMobileDeviceId;
+
+        return $this;
     }
 
     public function getIdentityDocumentNumber(): ?string
