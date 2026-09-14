@@ -33,8 +33,9 @@ final class UserAccountRegisterVerifyAction
 
         $phone = $payload['phone'] ?? null;
         $otp = $payload['otp'] ?? null;
-        $deviceId = isset($payload['deviceId']) && is_string($payload['deviceId'])
-            ? UserAccountService::normalizeMobileDeviceId($payload['deviceId'])
+        $rawDeviceId = $payload['deviceId'] ?? $payload['device_id'] ?? null;
+        $deviceId = is_string($rawDeviceId)
+            ? UserAccountService::normalizeMobileDeviceId($rawDeviceId)
             : null;
 
         if (!is_string($phone) || trim($phone) === '' || !is_string($otp) || trim($otp) === '') {
@@ -43,7 +44,7 @@ final class UserAccountRegisterVerifyAction
         if ($deviceId === null) {
             return new JsonResponse(['message' => 'deviceId est requis'], 400);
         }
-        if (strlen($deviceId) > 160) {
+        if (strlen($deviceId) > 128) {
             return new JsonResponse(['message' => 'deviceId est trop long'], 400);
         }
 
@@ -92,7 +93,9 @@ final class UserAccountRegisterVerifyAction
             'typ' => 'mobile',
             'uid' => $user['id'],
             'tv' => $tokenVersion,
+            'sessionVersion' => $tokenVersion,
             'did' => $deviceId,
+            'deviceId' => $deviceId,
         ]);
 
         return new JsonResponse([
@@ -102,7 +105,9 @@ final class UserAccountRegisterVerifyAction
                 'typ' => 'mobile_refresh',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'sessionVersion' => $tokenVersion,
                 'did' => $deviceId,
+                'deviceId' => $deviceId,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
         ], 201);

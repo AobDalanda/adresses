@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Security\Exception\SessionInvalidatedException;
 use Lexik\Bundle\JWTAuthenticationBundle\Encoder\JWTEncoderInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -63,19 +64,26 @@ class JwtAuthService
         }
 
         if (in_array($payload['typ'] ?? null, ['mobile', 'mobile_refresh'], true)) {
-            if (!isset($payload['uid'], $payload['tv'], $payload['did']) || !is_string($payload['did'])) {
+            $tokenVersion = $payload['tv'] ?? $payload['sessionVersion'] ?? null;
+            $deviceId = $payload['did'] ?? $payload['deviceId'] ?? null;
+            if (!isset($payload['uid'], $tokenVersion) || !is_string($deviceId)) {
                 return null;
             }
 
             $currentTokenVersion = $this->users->findTokenVersionById((int) $payload['uid']);
-            if ($currentTokenVersion === null || $currentTokenVersion !== (int) $payload['tv']) {
-                return null;
+            if ($currentTokenVersion === null || $currentTokenVersion !== (int) $tokenVersion) {
+                throw new SessionInvalidatedException();
             }
 
             $activeDeviceId = $this->users->findActiveMobileDeviceIdById((int) $payload['uid']);
-            if ($activeDeviceId === null || $activeDeviceId !== $payload['did']) {
-                return null;
+            if ($activeDeviceId === null || $activeDeviceId !== $deviceId) {
+                throw new SessionInvalidatedException();
             }
+
+            $payload['tv'] = (int) $tokenVersion;
+            $payload['sessionVersion'] = (int) $tokenVersion;
+            $payload['did'] = $deviceId;
+            $payload['deviceId'] = $deviceId;
         }
 
         if (in_array($payload['typ'] ?? null, ['back_office', 'back_office_refresh'], true)) {

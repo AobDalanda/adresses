@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Api\Controller;
 
 use App\Api\Controller\AuthRefreshTokenAction;
+use App\Security\Exception\SessionInvalidatedException;
 use App\Service\MobileTokenRefreshService;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -31,5 +32,18 @@ final class AuthRefreshTokenActionTest extends TestCase
             '{"token":"new-access-token","refreshToken":"new-refresh-token"}',
             $response->getContent()
         );
+    }
+
+    public function testRefreshReturnsSessionInvalidatedMessage(): void
+    {
+        $tokens = $this->createMock(MobileTokenRefreshService::class);
+        $tokens->method('refresh')->willThrowException(new SessionInvalidatedException());
+
+        $response = (new AuthRefreshTokenAction($tokens))->__invoke(
+            new Request(content: '{"refreshToken":"old-refresh-token"}')
+        );
+
+        self::assertSame(401, $response->getStatusCode());
+        self::assertSame('{"message":"SESSION_INVALIDATED"}', $response->getContent());
     }
 }

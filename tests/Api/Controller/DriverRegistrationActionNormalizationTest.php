@@ -75,6 +75,34 @@ final class DriverRegistrationActionNormalizationTest extends TestCase
         self::assertSame([], $input->vehiclePhotoPaths);
     }
 
+    public function testRegistrationAcceptsSnakeCaseDeviceId(): void
+    {
+        $controller = (new \ReflectionClass(DriverRegistrationAction::class))->newInstanceWithoutConstructor();
+        $method = new \ReflectionMethod(DriverRegistrationAction::class, 'buildInput');
+
+        $input = $method->invoke($controller, [
+            'phone' => '620000000',
+            'otp' => '123456',
+            'device_id' => ' device-2 ',
+            'profile' => [
+                'signupAs' => 'LIVREUR',
+                'fullName' => 'Mamadou Diallo',
+                'email' => 'mamadou@example.com',
+                'identityDocumentNumber' => 'CNI-123',
+                'identityDocumentPath' => 'supabase://identity-documents/cni.jpg',
+            ],
+            'vehicle' => [
+                'type' => 'A_PIED',
+                'deliveryZones' => ['Conakry'],
+            ],
+            'driverLicense' => [],
+            'vehicleDocuments' => [],
+            'vehiclePhotoPaths' => [],
+        ]);
+
+        self::assertSame('device-2', $input->deviceId);
+    }
+
     public function testRegistrationRejectsDatabaseOverflowBeforeInsert(): void
     {
         $controller = (new \ReflectionClass(DriverRegistrationAction::class))->newInstanceWithoutConstructor();

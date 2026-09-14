@@ -2,6 +2,7 @@
 
 namespace App\Api\Controller;
 
+use App\Security\Exception\SessionInvalidatedException;
 use App\Service\MobileTokenRefreshService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,7 +21,12 @@ final class AuthBiometricLoginAction
             return new JsonResponse(['message' => 'refreshToken est requis'], 400);
         }
 
-        $tokens = $this->tokens->refresh($refreshToken);
+        try {
+            $tokens = $this->tokens->refresh($refreshToken);
+        } catch (SessionInvalidatedException) {
+            return new JsonResponse(['message' => 'SESSION_INVALIDATED'], 401);
+        }
+
         if ($tokens === null) {
             return new JsonResponse(['message' => 'Refresh token invalide'], 401);
         }

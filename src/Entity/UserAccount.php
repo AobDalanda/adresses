@@ -49,8 +49,11 @@ class UserAccount
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
-    #[ORM\Column(length: 160, nullable: true)]
+    #[ORM\Column(length: 128, nullable: true)]
     private ?string $activeMobileDeviceId = null;
+
+    #[ORM\Column(options: ['default' => 0])]
+    private int $tokenVersion = 0;
 
     #[ORM\OneToOne(mappedBy: 'user', targetEntity: ProviderProfile::class)]
     private ?ProviderProfile $providerProfile = null;
@@ -165,6 +168,37 @@ class UserAccount
     public function setActiveMobileDeviceId(?string $activeMobileDeviceId): self
     {
         $this->activeMobileDeviceId = $activeMobileDeviceId;
+
+        return $this;
+    }
+
+    public function getActiveDeviceId(): ?string
+    {
+        return $this->activeMobileDeviceId;
+    }
+
+    public function setActiveDeviceId(?string $activeDeviceId): self
+    {
+        $this->activeMobileDeviceId = $activeDeviceId;
+
+        return $this;
+    }
+
+    public function getSessionVersion(): int
+    {
+        return $this->tokenVersion;
+    }
+
+    public function setSessionVersion(int $sessionVersion): self
+    {
+        $this->tokenVersion = $sessionVersion;
+
+        return $this;
+    }
+
+    public function incrementSessionVersion(): self
+    {
+        ++$this->tokenVersion;
 
         return $this;
     }

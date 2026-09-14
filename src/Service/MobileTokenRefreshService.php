@@ -17,17 +17,24 @@ class MobileTokenRefreshService
         if (
             !is_array($claims)
             || ($claims['typ'] ?? null) !== 'mobile_refresh'
-            || !isset($claims['uid'], $claims['tv'], $claims['sub'], $claims['did'])
-            || !is_string($claims['did'])
+            || !isset($claims['uid'], $claims['sub'])
         ) {
+            return null;
+        }
+
+        $tokenVersion = $claims['tv'] ?? $claims['sessionVersion'] ?? null;
+        $deviceId = $claims['did'] ?? $claims['deviceId'] ?? null;
+        if ($tokenVersion === null || !is_string($deviceId)) {
             return null;
         }
 
         $baseClaims = [
             'sub' => (string) $claims['sub'],
             'uid' => (int) $claims['uid'],
-            'tv' => (int) $claims['tv'],
-            'did' => $claims['did'],
+            'tv' => (int) $tokenVersion,
+            'sessionVersion' => (int) $tokenVersion,
+            'did' => $deviceId,
+            'deviceId' => $deviceId,
         ];
 
         return [

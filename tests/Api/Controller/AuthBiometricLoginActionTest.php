@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Api\Controller;
 
 use App\Api\Controller\AuthBiometricLoginAction;
+use App\Security\Exception\SessionInvalidatedException;
 use App\Service\MobileTokenRefreshService;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -60,5 +61,18 @@ final class AuthBiometricLoginActionTest extends TestCase
 
         self::assertSame(401, $response->getStatusCode());
         self::assertSame('{"message":"Refresh token invalide"}', $response->getContent());
+    }
+
+    public function testBiometricLoginReturnsSessionInvalidatedMessage(): void
+    {
+        $tokens = $this->createMock(MobileTokenRefreshService::class);
+        $tokens->method('refresh')->willThrowException(new SessionInvalidatedException());
+
+        $response = (new AuthBiometricLoginAction($tokens))->__invoke(
+            new Request(content: '{"refreshToken":"old-refresh-token"}')
+        );
+
+        self::assertSame(401, $response->getStatusCode());
+        self::assertSame('{"message":"SESSION_INVALIDATED"}', $response->getContent());
     }
 }

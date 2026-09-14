@@ -185,7 +185,7 @@ class UserAccountService
         if ($deviceId === null) {
             throw new \InvalidArgumentException('deviceId est requis');
         }
-        if (strlen($deviceId) > 160) {
+        if (strlen($deviceId) > 128) {
             throw new \InvalidArgumentException('deviceId est trop long');
         }
 

@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\UserAccount;
 use App\Security\AuthenticatedIdentity;
 use App\Security\AuthenticatedIdentityFactory;
+use App\Security\Exception\SessionInvalidatedException;
 use App\Security\MobileJwtAuthenticator;
 use App\Service\JwtAuthService;
 use PHPUnit\Framework\TestCase;
@@ -57,6 +58,29 @@ final class MobileJwtAuthenticatorTest extends TestCase
         } catch (BadCredentialsException $exception) {
             self::assertNull($authenticator->onAuthenticationFailure($request, $exception));
         }
+    }
+
+    public function testInvalidatedSessionReturnsExplicitJsonResponse(): void
+    {
+        $request = Request::create('/api/v1/provider/profile');
+        $request->headers->set('Authorization', 'Bearer old-token');
+
+        $jwt = $this->createMock(JwtAuthService::class);
+        $jwt->method('decodeFromRequest')->willThrowException(new SessionInvalidatedException());
+        $identities = $this->createMock(AuthenticatedIdentityFactory::class);
+
+        $authenticator = new MobileJwtAuthenticator($jwt, $identities);
+
+        try {
+            $authenticator->authenticate($request);
+            self::fail('Invalidated session should fail authentication.');
+        } catch (SessionInvalidatedException $exception) {
+            $response = $authenticator->onAuthenticationFailure($request, $exception);
+        }
+
+        self::assertNotNull($response);
+        self::assertSame(401, $response->getStatusCode());
+        self::assertSame('{"message":"SESSION_INVALIDATED"}', $response->getContent());
     }
 
     private function user(int $id): UserAccount

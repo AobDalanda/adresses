@@ -88,7 +88,9 @@ final class DriverRegistrationAction
                 'typ' => 'mobile',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'sessionVersion' => $tokenVersion,
                 'did' => $input->deviceId,
+                'deviceId' => $input->deviceId,
             ]);
         } catch (UniqueConstraintViolationException $exception) {
             $this->logger->warning('Driver registration uniqueness conflict', [
@@ -117,7 +119,9 @@ final class DriverRegistrationAction
                 'typ' => 'mobile_refresh',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'sessionVersion' => $tokenVersion,
                 'did' => $input->deviceId,
+                'deviceId' => $input->deviceId,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
             'application' => $application,
@@ -131,8 +135,9 @@ final class DriverRegistrationAction
     {
         $phone = $payload['phone'] ?? null;
         $otp = $payload['otp'] ?? null;
-        $deviceId = isset($payload['deviceId']) && is_string($payload['deviceId'])
-            ? UserAccountService::normalizeMobileDeviceId($payload['deviceId'])
+        $rawDeviceId = $payload['deviceId'] ?? $payload['device_id'] ?? null;
+        $deviceId = is_string($rawDeviceId)
+            ? UserAccountService::normalizeMobileDeviceId($rawDeviceId)
             : null;
         $profile = $payload['profile'] ?? null;
         $vehicle = $payload['vehicle'] ?? null;
@@ -146,7 +151,7 @@ final class DriverRegistrationAction
         if ($deviceId === null) {
             throw new \InvalidArgumentException('deviceId est requis');
         }
-        $this->assertMaxLength($deviceId, 160, 'deviceId');
+        $this->assertMaxLength($deviceId, 128, 'deviceId');
 
         if (!is_array($profile) || !is_array($vehicle) || !is_array($driverLicense) || !is_array($vehicleDocuments)) {
             throw new \InvalidArgumentException('profile, vehicle, driverLicense et vehicleDocuments sont requis');

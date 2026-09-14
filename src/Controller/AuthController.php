@@ -69,8 +69,9 @@ class AuthController extends AbstractController
         $phone = $payload['phone'] ?? null;
         $otp = $payload['otp'] ?? null;
         $name = $payload['name'] ?? null;
-        $deviceId = isset($payload['deviceId']) && is_string($payload['deviceId'])
-            ? UserAccountService::normalizeMobileDeviceId($payload['deviceId'])
+        $rawDeviceId = $payload['deviceId'] ?? $payload['device_id'] ?? null;
+        $deviceId = is_string($rawDeviceId)
+            ? UserAccountService::normalizeMobileDeviceId($rawDeviceId)
             : null;
         if (!is_string($phone) || $phone === '' || !is_string($otp) || $otp === '') {
             return $this->json(['message' => 'phone et otp sont requis'], 400);
@@ -78,7 +79,7 @@ class AuthController extends AbstractController
         if ($deviceId === null) {
             return $this->json(['message' => 'deviceId est requis'], 400);
         }
-        if (strlen($deviceId) > 160) {
+        if (strlen($deviceId) > 128) {
             return $this->json(['message' => 'deviceId est trop long'], 400);
         }
 
@@ -127,7 +128,9 @@ class AuthController extends AbstractController
             'typ' => 'mobile',
             'uid' => $user['id'],
             'tv' => $tokenVersion,
+            'sessionVersion' => $tokenVersion,
             'did' => $deviceId,
+            'deviceId' => $deviceId,
         ]);
 
         return $this->json([
@@ -137,7 +140,9 @@ class AuthController extends AbstractController
                 'typ' => 'mobile_refresh',
                 'uid' => $user['id'],
                 'tv' => $tokenVersion,
+                'sessionVersion' => $tokenVersion,
                 'did' => $deviceId,
+                'deviceId' => $deviceId,
             ], JwtAuthService::REFRESH_TOKEN_TTL_SECONDS),
             'user' => $this->userPayload($user),
         ]);

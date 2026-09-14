@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Security;
 
 use App\Service\JwtAuthService;
+use App\Security\Exception\SessionInvalidatedException;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
@@ -63,6 +65,10 @@ final class MobileJwtAuthenticator extends AbstractAuthenticator
         Request $request,
         AuthenticationException $exception
     ): ?Response {
+        if ($exception instanceof SessionInvalidatedException) {
+            return new JsonResponse(['message' => 'SESSION_INVALIDATED'], 401);
+        }
+
         // Existing v1 controllers retain their historical 401/403 payloads.
         return null;
     }

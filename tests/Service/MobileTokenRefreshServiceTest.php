@@ -29,13 +29,29 @@ final class MobileTokenRefreshServiceTest extends TestCase
                 static function (array $claims, ?int $ttl = null): string {
                     if ($claims['typ'] === 'mobile') {
                         self::assertNull($ttl);
-                        self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'did' => 'device-1', 'typ' => 'mobile'], $claims);
+                        self::assertSame([
+                            'sub' => '+224620000000',
+                            'uid' => 42,
+                            'tv' => 3,
+                            'sessionVersion' => 3,
+                            'did' => 'device-1',
+                            'deviceId' => 'device-1',
+                            'typ' => 'mobile',
+                        ], $claims);
 
                         return 'new-access-token';
                     }
 
                     self::assertSame(JwtAuthService::REFRESH_TOKEN_TTL_SECONDS, $ttl);
-                    self::assertSame(['sub' => '+224620000000', 'uid' => 42, 'tv' => 3, 'did' => 'device-1', 'typ' => 'mobile_refresh'], $claims);
+                    self::assertSame([
+                        'sub' => '+224620000000',
+                        'uid' => 42,
+                        'tv' => 3,
+                        'sessionVersion' => 3,
+                        'did' => 'device-1',
+                        'deviceId' => 'device-1',
+                        'typ' => 'mobile_refresh',
+                    ], $claims);
 
                     return 'new-refresh-token';
                 }
