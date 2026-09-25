@@ -17,12 +17,14 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     private const NOTIFICATION_BODY = 'Une nouvelle livraison est disponible.';
     private const NOTIFICATION_ICON = 'ic_stat_delivery';
     private const NOTIFICATION_COLOR = '#0F766E';
-
     public function __construct(
         private HubInterface $hub,
         private LoggerInterface $logger,
         private Connection $db,
         private PushClientInterface $push,
+        private int $maxDistanceMeters = 10000,
+        private int $maxLocationAccuracyMeters = 100,
+        private int $presenceTtlSeconds = 120,
     ) {
     }
 
@@ -50,30 +52,25 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         ];
 
         try {
-            $this->hub->publish(new Update(
-                self::NEW_DELIVERY_ORDER_TOPIC,
-                json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION),
-                private: true
-            ));
-
-            $this->logger->info('Mercure new delivery order notification published', [
-                'deliveryId' => $delivery['id'] ?? null,
-                'topic' => self::NEW_DELIVERY_ORDER_TOPIC,
-            ]);
-
             $sourceEventId = $this->recordDeliveryOutboxEvent($payload);
-            $this->publishDriverNotifications($sourceEventId, $payload);
+            $targets = $this->fetchEligibleDriverTargets($payload);
+            $this->publishDriverNotifications($sourceEventId, $payload, $targets);
+            $this->publishMercureNotifications($payload, array_keys($targets));
 
             return true;
         } catch (\Throwable $exception) {
-            $this->logger->error('Mercure new delivery order notification failed', [
+            $this->logger->error('New delivery order notification failed', [
                 'deliveryId' => $delivery['id'] ?? null,
-                'topic' => self::NEW_DELIVERY_ORDER_TOPIC,
                 'exception' => $exception,
             ]);
 
             return false;
         }
+    }
+
+    public static function topicForDriver(int $driverId): string
+    {
+        return sprintf(self::NEW_DELIVERY_ORDER_TOPIC_TEMPLATE, $driverId);
     }
 
     /**
@@ -110,10 +107,8 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     /**
      * @param array<string, mixed> $payload
      */
-    private function publishDriverNotifications(string $sourceEventId, array $payload): void
+    private function publishDriverNotifications(string $sourceEventId, array $payload, array $targets): void
     {
-        $targets = $this->fetchEligibleDriverTargets();
-
         if ($targets === []) {
             $this->logger->info('No eligible driver registered for new delivery notification', [
                 'deliveryId' => $payload['delivery']['id'] ?? null,
@@ -157,8 +152,31 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     /**
      * @return array<int, list<string>>
      */
-    private function fetchEligibleDriverTargets(): array
+    private function fetchEligibleDriverTargets(array $payload): array
     {
+        $pickup = $payload['delivery']['pickupAddress'] ?? null;
+        if (
+            !is_array($pickup)
+            || !is_numeric($pickup['latitude'] ?? null)
+            || !is_numeric($pickup['longitude'] ?? null)
+        ) {
+            $this->logger->warning('New delivery notification skipped: invalid pickup coordinates', [
+                'deliveryId' => $payload['delivery']['id'] ?? null,
+            ]);
+
+            return [];
+        }
+
+        $latitude = (float) $pickup['latitude'];
+        $longitude = (float) $pickup['longitude'];
+        if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+            $this->logger->warning('New delivery notification skipped: pickup coordinates out of range', [
+                'deliveryId' => $payload['delivery']['id'] ?? null,
+            ]);
+
+            return [];
+        }
+
         $rows = $this->db->fetchAllAssociative(
             <<<'SQL'
                 SELECT DISTINCT account.id AS user_id, device.token
@@ -167,12 +185,40 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                 JOIN provider_authorization provider_auth
                     ON provider_auth.provider_profile_id = profile.id
                    AND provider_auth.status = 'ACTIVE'
+                JOIN driver_availability availability
+                  ON availability.driver_id = account.id
+                 AND availability.is_online = TRUE
+                 AND availability.last_heartbeat_at >= now() - (:presenceTtl * INTERVAL '1 second')
+                JOIN LATERAL (
+                    SELECT location.position, location.accuracy, location.is_mocked, location.is_suspect,
+                           location.created_at
+                    FROM driver_location location
+                    WHERE location.driver_id = account.id
+                    ORDER BY location.created_at DESC, location.id DESC
+                    LIMIT 1
+                ) latest_location ON TRUE
                 LEFT JOIN user_push_device device
                     ON device.user_id = account.id
                    AND device.enabled = TRUE
                 WHERE profile.can_deliver = TRUE
                   AND profile.validation_status = 'approved'
+                  AND latest_location.created_at >= now() - (:presenceTtl * INTERVAL '1 second')
+                  AND latest_location.is_mocked = FALSE
+                  AND latest_location.is_suspect = FALSE
+                  AND latest_location.accuracy <= :maxAccuracy
+                  AND ST_DWithin(
+                      latest_location.position,
+                      ST_SetSRID(ST_MakePoint(:pickupLongitude, :pickupLatitude), 4326)::geography,
+                      :radiusMeters
+                  )
                 SQL,
+            [
+                'presenceTtl' => $this->presenceTtlSeconds,
+                'maxAccuracy' => $this->maxLocationAccuracyMeters,
+                'pickupLongitude' => $longitude,
+                'pickupLatitude' => $latitude,
+                'radiusMeters' => $this->maxDistanceMeters,
+            ],
         );
 
         $targets = [];
@@ -190,6 +236,29 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         }
 
         return $targets;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param list<int> $driverIds
+     */
+    private function publishMercureNotifications(array $payload, array $driverIds): void
+    {
+        $data = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+
+        foreach ($driverIds as $driverId) {
+            $topic = self::topicForDriver($driverId);
+            try {
+                $this->hub->publish(new Update($topic, $data, private: true));
+            } catch (\Throwable $exception) {
+                $this->logger->error('Mercure new delivery order notification failed', [
+                    'deliveryId' => $payload['delivery']['id'] ?? null,
+                    'driverId' => $driverId,
+                    'topic' => $topic,
+                    'exception' => $exception,
+                ]);
+            }
+        }
     }
 
     /**

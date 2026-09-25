@@ -8,6 +8,42 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /drivers/me/availability:
+    get:
+      tags: [Driver availability]
+      summary: Lire la disponibilité du livreur authentifié
+      responses:
+        '200':
+          description: Choix explicite et présence effective
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverAvailability' }
+        '401':
+          description: JWT absent ou invalide
+    put:
+      tags: [Driver availability]
+      summary: Passer le livreur authentifié en ligne ou hors ligne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [online]
+              properties:
+                online: { type: boolean }
+      responses:
+        '200':
+          description: Disponibilité mise à jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverAvailability' }
+        '401':
+          description: JWT absent ou invalide
+        '403':
+          description: Le compte ne peut pas passer en ligne
+        '422':
+          description: Le profil ou l'autorisation prestataire n'est pas actif
   /deliveries/{deliveryId}/accept:
     post:
       tags: [Delivery assignment]
@@ -151,6 +187,14 @@ components:
       required: true
       schema: { type: integer, minimum: 1 }
   schemas:
+    DriverAvailability:
+      type: object
+      required: [online, effectiveOnline, changedAt, lastHeartbeatAt]
+      properties:
+        online: { type: boolean }
+        effectiveOnline: { type: boolean }
+        changedAt: { type: [string, 'null'], format: date-time }
+        lastHeartbeatAt: { type: [string, 'null'], format: date-time }
     DeliveryAcceptance:
       type: object
       required: [deliveryId, driverId, status, statusLabel, statusGroup, assignedAt]

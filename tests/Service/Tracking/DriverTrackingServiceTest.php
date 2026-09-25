@@ -9,6 +9,7 @@ use App\Dto\Tracking\LocationHistoryQuery;
 use App\Entity\DriverLocation;
 use App\Repository\DriverLocationRepositoryInterface;
 use App\Service\Tracking\DriverTrackingService;
+use App\Service\Tracking\DriverAvailabilityService;
 use App\Service\Tracking\DeliveryTrackingService;
 use App\Service\Tracking\LocationPublisherInterface;
 use Doctrine\DBAL\Connection;
@@ -30,6 +31,7 @@ final class DriverTrackingServiceTest extends TestCase
             $repository,
             $publisher,
             new DeliveryTrackingService($db),
+            new DriverAvailabilityService($db),
             $db,
             new NullLogger(),
         );
@@ -61,6 +63,7 @@ final class DriverTrackingServiceTest extends TestCase
             $repository,
             $this->createMock(LocationPublisherInterface::class),
             new DeliveryTrackingService($db = $this->trackingConnection()),
+            new DriverAvailabilityService($db),
             $db,
             new NullLogger(),
         );
@@ -82,6 +85,7 @@ final class DriverTrackingServiceTest extends TestCase
             $repository,
             $this->createMock(LocationPublisherInterface::class),
             new DeliveryTrackingService($db = $this->trackingConnection()),
+            new DriverAvailabilityService($db),
             $db,
             new NullLogger(),
         );
@@ -99,6 +103,7 @@ final class DriverTrackingServiceTest extends TestCase
             $repository,
             $this->createMock(LocationPublisherInterface::class),
             new DeliveryTrackingService($db = $this->trackingConnection()),
+            new DriverAvailabilityService($db),
             $db,
             new NullLogger(),
         );

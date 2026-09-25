@@ -57,7 +57,7 @@ final class DriverTrackingContainerTest extends KernelTestCase
 
         $cookie = $authorization->createCookie(
             Request::create('http://localhost/api/v1/deliveries/mercure-authorization'),
-            [DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC]
+            [sprintf(DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC_TEMPLATE, 15)]
         );
 
         self::assertSame('mercureAuthorization', $cookie->getName());

@@ -6,7 +6,7 @@ namespace App\Service;
 
 interface DeliveryOrderNotificationPublisherInterface
 {
-    public const NEW_DELIVERY_ORDER_TOPIC = 'drivers/delivery-orders/new';
+    public const NEW_DELIVERY_ORDER_TOPIC_TEMPLATE = 'drivers/%d/delivery-orders/new';
 
     /**
      * @param array<string, mixed> $delivery

@@ -15,7 +15,7 @@ use Symfony\Component\Mercure\Update;
 
 final class DeliveryOrderNotificationPublisherTest extends TestCase
 {
-    public function testPublishesNewDeliveryOrderToDriversTopic(): void
+    public function testPublishesNewDeliveryOrderToEligibleDriverTopic(): void
     {
         $hub = $this->createMock(HubInterface::class);
         $hub->expects(self::once())
@@ -23,7 +23,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
             ->with(self::callback(static function (Update $update): bool {
                 $payload = json_decode($update->getData(), true, 512, JSON_THROW_ON_ERROR);
 
-                return $update->getTopics() === [DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC]
+                return $update->getTopics() === [sprintf(DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC_TEMPLATE, 42)]
                     && $update->isPrivate()
                     && $payload['type'] === 'delivery_order.created'
                     && $payload['delivery']['id'] === '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b'
@@ -35,14 +35,14 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         $publisher = new DeliveryOrderNotificationPublisher(
             $hub,
             new NullLogger(),
-            $this->connectionWithDriverTargets([]),
+            $this->connectionWithDriverTargets([['user_id' => 42, 'token' => null]]),
             $this->createMock(PushClientInterface::class),
         );
 
         self::assertTrue($publisher->publishNewDeliveryOrder([
             'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
             'status' => 'QUOTED',
-            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison', 'latitude' => 9.6412, 'longitude' => -13.5784],
             'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
             'recipient' => ['name' => 'Mamadou Diallo', 'phone' => '224620123456'],
             'pricing' => [
@@ -64,12 +64,13 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         $publisher = new DeliveryOrderNotificationPublisher(
             $hub,
             new NullLogger(),
-            $this->connectionWithDriverTargets([]),
+            $this->connectionWithDriverTargets([['user_id' => 42, 'token' => null]]),
             $this->createMock(PushClientInterface::class),
         );
 
-        self::assertFalse($publisher->publishNewDeliveryOrder([
+        self::assertTrue($publisher->publishNewDeliveryOrder([
             'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
+            'pickupAddress' => ['latitude' => 9.6412, 'longitude' => -13.5784],
         ]));
     }
 
@@ -108,7 +109,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         self::assertTrue($publisher->publishNewDeliveryOrder([
             'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
             'status' => 'QUOTED',
-            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison', 'latitude' => 9.6412, 'longitude' => -13.5784],
             'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
             'pricing' => [
                 'distanceKm' => 8.4,
@@ -145,7 +146,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         self::assertTrue($publisher->publishNewDeliveryOrder([
             'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
             'status' => 'QUOTED',
-            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison', 'latitude' => 9.6412, 'longitude' => -13.5784],
             'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
             'pricing' => [
                 'distanceKm' => 8.4,
@@ -187,7 +188,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         self::assertTrue($publisher->publishNewDeliveryOrder([
             'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
             'status' => 'QUOTED',
-            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison', 'latitude' => 9.6412, 'longitude' => -13.5784],
             'dropoffAddress' => ['id' => 45, 'displayLabel' => 'Bureau'],
             'pricing' => [
                 'distanceKm' => 8.4,
@@ -201,6 +202,24 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
         self::assertTrue($this->hasStatement($executedStatements, 'token_hash = :tokenHash'));
     }
 
+    public function testMissingPickupCoordinatesFailsClosed(): void
+    {
+        $hub = $this->createMock(HubInterface::class);
+        $hub->expects(self::never())->method('publish');
+        $push = $this->createMock(PushClientInterface::class);
+        $push->expects(self::never())->method('send');
+        $db = $this->createMock(Connection::class);
+        $db->expects(self::never())->method('fetchAllAssociative');
+        $db->method('executeStatement')->willReturn(1);
+
+        $publisher = new DeliveryOrderNotificationPublisher($hub, new NullLogger(), $db, $push);
+
+        self::assertTrue($publisher->publishNewDeliveryOrder([
+            'id' => '018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b',
+            'pickupAddress' => ['id' => 12, 'displayLabel' => 'Maison'],
+        ]));
+    }
+
     /**
      * @param list<array{user_id: int, token: ?string}> $targets
      */
@@ -208,9 +227,12 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
     {
         $db = $this->createMock(Connection::class);
         $db->method('fetchAllAssociative')
-            ->willReturnCallback(static function (string $sql) use ($targets): array {
+            ->willReturnCallback(static function (string $sql, array $params = []) use ($targets): array {
                 self::assertStringContainsString('FROM user_account account', $sql);
                 self::assertStringContainsString('JOIN provider_authorization provider_auth', $sql);
+                self::assertStringContainsString('JOIN driver_availability availability', $sql);
+                self::assertStringContainsString('ST_DWithin', $sql);
+                self::assertSame(10000, $params['radiusMeters']);
 
                 return $targets;
             });

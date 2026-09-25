@@ -36,6 +36,9 @@ parameters:
     provider_v2_rollout_salt: '%env(string:PROVIDER_V2_ROLLOUT_SALT)%'
     provider_v1_sunset: '%env(default::PROVIDER_V1_SUNSET)%'
     provider_upload_session_ttl_seconds: '%env(int:PROVIDER_UPLOAD_SESSION_TTL_SECONDS)%'
+    driver_notification_radius_meters: '%env(int:DRIVER_NOTIFICATION_RADIUS_METERS)%'
+    driver_presence_ttl_seconds: '%env(int:DRIVER_PRESENCE_TTL_SECONDS)%'
+    driver_location_max_accuracy_meters: '%env(int:DRIVER_LOCATION_MAX_ACCURACY_METERS)%'
 
 services:
     # default configuration for services in *this* file
@@ -81,6 +84,17 @@ services:
 
     App\Service\DeliveryOrderNotificationPublisherInterface:
         alias: App\Service\DeliveryOrderNotificationPublisher
+
+    App\Service\DeliveryOrderNotificationPublisher:
+        arguments:
+            $maxDistanceMeters: '%driver_notification_radius_meters%'
+            $maxLocationAccuracyMeters: '%driver_location_max_accuracy_meters%'
+            $presenceTtlSeconds: '%driver_presence_ttl_seconds%'
+
+    App\Service\Tracking\DriverAvailabilityService:
+        arguments:
+            $presenceTtlSeconds: '%driver_presence_ttl_seconds%'
+            $maxLocationAccuracyMeters: '%driver_location_max_accuracy_meters%'
 
     App\Service\PushClientInterface:
         alias: App\Service\FcmPushClient

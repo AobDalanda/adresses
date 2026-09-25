@@ -33,7 +33,10 @@ final readonly class DeliveryMercureAuthorizationAction
             return new JsonResponse(['message' => 'Forbidden'], 403);
         }
 
-        $topic = DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC;
+        $topic = sprintf(
+            DeliveryOrderNotificationPublisherInterface::NEW_DELIVERY_ORDER_TOPIC_TEMPLATE,
+            (int) $identity->userId,
+        );
 
         try {
             $this->mercureAuthorization->setCookie(

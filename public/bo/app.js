@@ -4,7 +4,7 @@ const state = {
   providers: [],
   plans: [],
   users: [],
-  userType: 'BO',
+  userType: 'MOBILE',
   deferredInstall: null,
   otpRequested: false,
   loginInProgress: false,
@@ -47,7 +47,7 @@ function loadStoredToken() {
 
 function wasReloadedForVersion() {
   try {
-    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '10';
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '11';
   } catch (error) {
     return false;
   }
@@ -321,8 +321,11 @@ async function loadUsers() {
   state.userType = type;
   setUsersMessage('Chargement...');
   try {
-    const data = await authorizedJson(`/api/v1/admin/users?type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`);
-    state.users = data.users || [];
+    const types = type === 'MOBILE' ? ['PRESTATAIRE', 'CLIENT'] : [type];
+    const responses = await Promise.all(types.map((userType) => (
+      authorizedJson(`/api/v1/admin/users?type=${encodeURIComponent(userType)}&search=${encodeURIComponent(search)}`)
+    )));
+    state.users = responses.flatMap((data) => data.users || []);
     setUsersMessage('');
     renderUsers();
   } catch (error) {
@@ -349,7 +352,7 @@ function openUserForm(user = null) {
   $('[data-user-form]').reset();
   $('[data-user-id]').value = user?.id || '';
   $('[data-user-form-title]').textContent = user ? 'Modifier l’utilisateur' : 'Ajouter un utilisateur';
-  $('[data-user-form-type]').value = user?.type || state.userType;
+  $('[data-user-form-type]').value = user?.type || (state.userType === 'MOBILE' ? 'CLIENT' : state.userType);
   $('[data-user-form-type]').disabled = Boolean(user);
   $('[data-user-name]').value = user?.name || '';
   $('[data-user-phone]').value = user?.phone || '';
@@ -393,7 +396,7 @@ async function saveUser(event) {
       body: payload
     });
     closeUserForm();
-    $('[data-user-type]').value = type;
+    $('[data-user-type]').value = state.userType === 'MOBILE' && type !== 'BO' ? 'MOBILE' : type;
     await loadUsers();
   } catch (error) {
     message.textContent = error.message;
@@ -539,11 +542,11 @@ function registerServiceWorker() {
 
     state.reloadedForVersion = true;
     try {
-      sessionStorage.setItem('aldahim.bo.versionReloaded', '10');
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '11');
     } catch (error) {
       // Continue with the one-time reload even when session storage is unavailable.
     }
-    window.location.replace('/?pwa=aldahim-bo&v=10');
+    window.location.replace('/?pwa=aldahim-bo&v=11');
   });
 
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {

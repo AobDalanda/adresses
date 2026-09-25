@@ -115,3 +115,21 @@ activee dans la configuration FrankenPHP/Caddy: sans cookie valide, le hub doit
 refuser les abonnements aux evenements prives.
 
 La specification complete est dans `docs/driver-tracking-openapi.yaml`.
+# Disponibilité du livreur
+
+Le choix en ligne/hors ligne est distinct de la fraîcheur de la position GPS.
+
+```http
+GET /api/v1/drivers/me/availability
+Authorization: Bearer <JWT>
+```
+
+```http
+PUT /api/v1/drivers/me/availability
+Authorization: Bearer <JWT>
+Content-Type: application/json
+
+{"online": true}
+```
+
+La réponse contient `online`, le choix explicite du livreur, et `effectiveOnline`, qui n'est vrai que si un heartbeat GPS fiable a été reçu depuis moins de deux minutes. Avant de passer en ligne, le mobile doit publier une position GPS récente. Une nouvelle commande est adressée seulement aux livreurs effectivement en ligne dont la dernière position fiable se trouve à 10 km maximum du départ.

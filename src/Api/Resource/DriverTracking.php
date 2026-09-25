@@ -8,6 +8,8 @@ use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
+use App\Api\Controller\DriverAvailabilityAction;
 use ApiPlatform\OpenApi\Model\Operation;
 use App\Api\Controller\DriverLocationHistoryAction;
 use App\Api\Controller\DriverLocationLastAction;
@@ -15,6 +17,22 @@ use App\Api\Controller\DriverLocationMercureAuthorizationAction;
 use App\Api\Controller\DriverLocationUpdateAction;
 
 #[ApiResource(operations: [
+    new Get(
+        uriTemplate: '/drivers/me/availability',
+        controller: DriverAvailabilityAction::class,
+        read: false,
+        deserialize: false,
+        output: false,
+        name: 'app_driver_availability_get'
+    ),
+    new Put(
+        uriTemplate: '/drivers/me/availability',
+        controller: DriverAvailabilityAction::class,
+        read: false,
+        deserialize: false,
+        output: false,
+        name: 'app_driver_availability_update'
+    ),
     new Post(
         uriTemplate: '/drivers/location',
         controller: DriverLocationUpdateAction::class,

@@ -34,14 +34,14 @@ final class BackOfficeLoginUiTest extends TestCase
         $template = file_get_contents($projectRoot . '/templates/back_office/index.html.twig');
 
         self::assertIsString($serviceWorker);
-        self::assertStringContainsString("const CACHE_NAME = 'aldahim-bo-v10';", $serviceWorker);
-        self::assertStringContainsString("'/bo/styles.css?v=10'", $serviceWorker);
-        self::assertStringNotContainsString('v=9', $serviceWorker);
+        self::assertStringContainsString("const CACHE_NAME = 'aldahim-bo-v11';", $serviceWorker);
+        self::assertStringContainsString("'/bo/styles.css?v=11'", $serviceWorker);
+        self::assertStringNotContainsString('v=10', $serviceWorker);
 
         self::assertIsString($template);
-        self::assertStringContainsString('/bo/styles.css?v=10', $template);
-        self::assertStringContainsString('/bo/app.js?v=10', $template);
-        self::assertStringNotContainsString('v=9', $template);
+        self::assertStringContainsString('/bo/styles.css?v=11', $template);
+        self::assertStringContainsString('/bo/app.js?v=11', $template);
+        self::assertStringNotContainsString('v=10', $template);
     }
 
     public function testDashboardExposesUserManagementWithoutBoDeletion(): void
@@ -52,11 +52,13 @@ final class BackOfficeLoginUiTest extends TestCase
 
         self::assertIsString($template);
         self::assertStringContainsString('data-view="users"', $template);
+        self::assertStringContainsString('<option value="MOBILE">Clients et prestataires</option>', $template);
         self::assertStringContainsString('<option value="BO">BO</option>', $template);
         self::assertStringContainsString('<option value="PRESTATAIRE">Prestataires</option>', $template);
         self::assertStringContainsString('<option value="CLIENT">Clients</option>', $template);
 
         self::assertIsString($javascript);
+        self::assertStringContainsString("type === 'MOBILE' ? ['PRESTATAIRE', 'CLIENT'] : [type]", $javascript);
         self::assertStringContainsString("user.type === 'BO' ? ''", $javascript);
         self::assertStringContainsString('/api/v1/admin/users/', $javascript);
     }
