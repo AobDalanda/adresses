@@ -11,6 +11,48 @@ use PHPUnit\Framework\TestCase;
 
 final class ProviderProfileServiceTest extends TestCase
 {
+    public function testApprovingProfileCreatesMatchingActiveAuthorizationAtomically(): void
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->expects(self::once())
+            ->method('transactional')
+            ->willReturnCallback(static fn (callable $callback): mixed => $callback($connection));
+        $connection->method('fetchAssociative')->willReturnOnConsecutiveCalls(
+            ['can_deliver' => true, 'can_transport_people' => false],
+            [
+                'id' => 2,
+                'user_id' => 43,
+                'can_deliver' => true,
+                'can_transport_people' => false,
+                'validation_status' => 'approved',
+                'created_at' => '2026-09-26 12:00:00',
+                'updated_at' => '2026-09-26 17:00:00',
+                'phone' => '33781191499',
+                'name' => 'Provider 43',
+                'email' => null,
+                'verified' => true,
+                'account_type' => 'client',
+            ],
+        );
+        $connection->expects(self::exactly(2))
+            ->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $parameters = []): int {
+                if (str_contains($sql, 'INSERT INTO provider_authorization')) {
+                    self::assertSame('ACTIVE', $parameters['authorizationStatus']);
+                    self::assertTrue($parameters['canDeliver']);
+                    self::assertFalse($parameters['canTransportPeople']);
+                }
+
+                return 1;
+            });
+
+        $profile = (new ProviderProfileService($connection))->updateStatus(2, 'approved');
+
+        self::assertNotNull($profile);
+        self::assertSame('approved', $profile['validationStatus']);
+        self::assertTrue($profile['canDeliver']);
+    }
+
     public function testTransportOnlyActivitiesUseBooleanDbalTypes(): void
     {
         $connection = $this->createMock(Connection::class);

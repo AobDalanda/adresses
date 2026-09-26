@@ -145,17 +145,61 @@ final class ProviderProfileService
             throw new \InvalidArgumentException('validationStatus est invalide');
         }
 
-        $updated = $this->db->executeStatement(
-            '
-            UPDATE provider_profile
-            SET validation_status = :status,
-                updated_at = now()
-            WHERE id = :profileId
-            ',
-            ['profileId' => $profileId, 'status' => $status]
-        );
+        return $this->db->transactional(function () use ($profileId, $status): ?array {
+            $profile = $this->db->fetchAssociative(
+                'SELECT can_deliver, can_transport_people FROM provider_profile WHERE id = :profileId FOR UPDATE',
+                ['profileId' => $profileId]
+            );
+            if ($profile === false) {
+                return null;
+            }
 
-        return $updated === 0 ? null : $this->findById($profileId);
+            $this->db->executeStatement(
+                '
+                UPDATE provider_profile
+                SET validation_status = :status,
+                    updated_at = now()
+                WHERE id = :profileId
+                ',
+                ['profileId' => $profileId, 'status' => $status]
+            );
+
+            $active = $status === 'approved';
+            $authorizationStatus = match ($status) {
+                'approved' => 'ACTIVE',
+                'suspended' => 'SUSPENDED',
+                default => 'INACTIVE',
+            };
+            $this->db->executeStatement(
+                <<<'SQL'
+                    INSERT INTO provider_authorization (
+                        provider_profile_id, status, can_deliver, can_transport_people,
+                        created_at, updated_at
+                    ) VALUES (
+                        :profileId, :authorizationStatus, :canDeliver, :canTransportPeople,
+                        now(), now()
+                    )
+                    ON CONFLICT (provider_profile_id) DO UPDATE
+                    SET status = EXCLUDED.status,
+                        can_deliver = EXCLUDED.can_deliver,
+                        can_transport_people = EXCLUDED.can_transport_people,
+                        updated_at = now(),
+                        lock_version = provider_authorization.lock_version + 1
+                    SQL,
+                [
+                    'profileId' => $profileId,
+                    'authorizationStatus' => $authorizationStatus,
+                    'canDeliver' => $active && $this->toBoolean($profile['can_deliver']),
+                    'canTransportPeople' => $active && $this->toBoolean($profile['can_transport_people']),
+                ],
+                [
+                    'canDeliver' => ParameterType::BOOLEAN,
+                    'canTransportPeople' => ParameterType::BOOLEAN,
+                ]
+            );
+
+            return $this->findById($profileId);
+        });
     }
 
     private function baseSelect(): string

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Tracking;
 
+use App\Exception\DriverNotAuthorizedException;
+use App\Exception\DriverProfileIncompleteException;
+use App\Exception\DriverProfileNotFoundException;
 use Doctrine\DBAL\Connection;
 
 final readonly class DriverAvailabilityService
@@ -21,30 +24,42 @@ final readonly class DriverAvailabilityService
         $row = $this->db->fetchAssociative(
             <<<'SQL'
                 SELECT
-                    availability.requested_online,
-                    availability.availability_version,
+                    profile.id AS profile_id,
+                    profile.can_deliver,
+                    profile.validation_status,
+                    provider_auth.id AS authorization_id,
+                    provider_auth.status AS authorization_status,
+                    provider_auth.can_deliver AS authorization_can_deliver,
+                    legacy_application.status AS legacy_application_status,
+                    COALESCE(availability.requested_online, FALSE) AS requested_online,
+                    COALESCE(availability.availability_version, 0) AS availability_version,
                     availability.changed_at,
                     latest.recorded_at AS last_location_at,
-                    availability.requested_online = TRUE
+                    COALESCE(availability.requested_online, FALSE) = TRUE
                         AND profile.validation_status = 'approved'
                         AND profile.can_deliver = TRUE
-                        AND authorization.id IS NOT NULL
+                        AND provider_auth.status = 'ACTIVE'
+                        AND provider_auth.can_deliver = TRUE
                         AND latest.recorded_at >= now() - (:presenceTtl * INTERVAL '1 second')
                         AND latest.accuracy <= :maxAccuracy
                         AND latest.is_mocked = FALSE
                         AND latest.is_suspect = FALSE AS effective_online
-                FROM driver_availability availability
-                JOIN provider_profile profile ON profile.user_id = availability.driver_id
-                LEFT JOIN provider_authorization authorization
-                  ON authorization.provider_profile_id = profile.id AND authorization.status = 'ACTIVE'
+                FROM user_account account
+                LEFT JOIN provider_profile profile ON profile.user_id = account.id
+                LEFT JOIN provider_authorization provider_auth
+                  ON provider_auth.provider_profile_id = profile.id
+                LEFT JOIN driver_application legacy_application
+                  ON legacy_application.user_id = account.id
+                 AND legacy_application.status = 'APPROVED'
+                LEFT JOIN driver_availability availability ON availability.driver_id = account.id
                 LEFT JOIN LATERAL (
                     SELECT recorded_at, accuracy, is_mocked, is_suspect
                     FROM driver_location
-                    WHERE driver_id = availability.driver_id
+                    WHERE driver_id = account.id
                     ORDER BY created_at DESC, id DESC
                     LIMIT 1
                 ) latest ON TRUE
-                WHERE availability.driver_id = :driverId
+                WHERE account.id = :driverId
                 SQL,
             [
                 'driverId' => $driverId,
@@ -54,15 +69,10 @@ final readonly class DriverAvailabilityService
         );
 
         if ($row === false) {
-            return [
-                'requestedOnline' => false,
-                'online' => false,
-                'effectiveOnline' => false,
-                'availabilityVersion' => 0,
-                'changedAt' => null,
-                'lastLocationAt' => null,
-            ];
+            throw new DriverProfileNotFoundException('Utilisateur introuvable.');
         }
+
+        $this->assertProfileExists($row);
 
         $requestedOnline = $this->toBool($row['requested_online']);
 
@@ -80,8 +90,9 @@ final readonly class DriverAvailabilityService
     /** @return array{requestedOnline: bool, online: bool, effectiveOnline: bool, availabilityVersion: int, changedAt: ?string, lastLocationAt: ?string} */
     public function set(int $driverId, bool $online): array
     {
-        if ($online && !$this->isEligibleDriver($driverId)) {
-            throw new \DomainException('Le prestataire ne peut pas passer en ligne.');
+        $profile = $this->profileState($driverId);
+        if ($online) {
+            $this->assertProfileIsUsable($profile);
         }
 
         $this->db->executeStatement(
@@ -114,23 +125,74 @@ final readonly class DriverAvailabilityService
         ));
     }
 
-    private function isEligibleDriver(int $driverId): bool
+    /** @return array<string, mixed> */
+    private function profileState(int $driverId): array
     {
-        return $this->toBool($this->db->fetchOne(
+        $row = $this->db->fetchAssociative(
             <<<'SQL'
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM provider_profile profile
-                    JOIN provider_authorization authorization
-                      ON authorization.provider_profile_id = profile.id
-                     AND authorization.status = 'ACTIVE'
-                    WHERE profile.user_id = :driverId
-                      AND profile.can_deliver = TRUE
-                      AND profile.validation_status = 'approved'
-                )
+                SELECT
+                    profile.id AS profile_id,
+                    profile.can_deliver,
+                    profile.validation_status,
+                    provider_auth.id AS authorization_id,
+                    provider_auth.status AS authorization_status,
+                    provider_auth.can_deliver AS authorization_can_deliver,
+                    legacy_application.status AS legacy_application_status
+                FROM user_account account
+                LEFT JOIN provider_profile profile ON profile.user_id = account.id
+                LEFT JOIN provider_authorization provider_auth
+                  ON provider_auth.provider_profile_id = profile.id
+                LEFT JOIN driver_application legacy_application
+                  ON legacy_application.user_id = account.id
+                 AND legacy_application.status = 'APPROVED'
+                WHERE account.id = :driverId
                 SQL,
             ['driverId' => $driverId],
-        ));
+        );
+
+        if ($row === false) {
+            throw new DriverProfileNotFoundException('Utilisateur introuvable.');
+        }
+
+        if ($row['profile_id'] === null) {
+            if ($row['legacy_application_status'] === 'APPROVED') {
+                throw new DriverProfileNotFoundException('Aucun profil Driver canonique n’existe pour ce prestataire approuvé.');
+            }
+
+            throw new DriverNotAuthorizedException('Ce compte n’est pas un prestataire.');
+        }
+
+        return $row;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function assertProfileIsUsable(array $row): void
+    {
+        $this->assertProfileExists($row);
+        if (!$this->toBool($row['can_deliver']) || (string) $row['validation_status'] !== 'approved') {
+            throw new DriverNotAuthorizedException('Le profil prestataire n’est pas autorisé à livrer.');
+        }
+        if ($row['authorization_id'] === null) {
+            throw new DriverProfileIncompleteException('Le profil Driver ne possède aucune autorisation exploitable.');
+        }
+        if (
+            (string) $row['authorization_status'] !== 'ACTIVE'
+            || !$this->toBool($row['authorization_can_deliver'])
+        ) {
+            throw new DriverNotAuthorizedException('L’autorisation de livraison du prestataire n’est pas active.');
+        }
+    }
+
+    /** @param array<string, mixed> $row */
+    private function assertProfileExists(array $row): void
+    {
+        if ($row['profile_id'] === null) {
+            if (($row['legacy_application_status'] ?? null) === 'APPROVED') {
+                throw new DriverProfileNotFoundException('Aucun profil Driver canonique n’existe pour ce prestataire approuvé.');
+            }
+
+            throw new DriverNotAuthorizedException('Ce compte n’est pas un prestataire.');
+        }
     }
 
     private function toBool(mixed $value): bool

@@ -20,6 +20,14 @@ paths:
               schema: { $ref: '#/components/schemas/DriverAvailability' }
         '401':
           description: JWT absent ou invalide
+        '403':
+          description: Le compte authentifié n'est pas un prestataire autorisé
+        '404':
+          description: Aucun profil Driver canonique n'existe pour ce compte
+        '422':
+          description: Le profil Driver existe mais il est incomplet
+        '500':
+          description: Erreur serveur inattendue avec un code JSON explicite
     put:
       tags: [Driver availability]
       summary: Passer le livreur authentifié en ligne ou hors ligne
@@ -45,8 +53,16 @@ paths:
               schema: { $ref: '#/components/schemas/DriverAvailability' }
         '401':
           description: JWT absent ou invalide
+        '400':
+          description: Payload JSON invalide ou champ online absent/invalide
+        '403':
+          description: Le compte authentifié n'est pas un prestataire autorisé
+        '404':
+          description: Aucun profil Driver canonique n'existe pour ce compte
         '422':
-          description: Le profil ou l'autorisation prestataire n'est pas actif
+          description: Le profil Driver existe mais il est incomplet
+        '500':
+          description: Erreur serveur inattendue avec un code JSON explicite
   /deliveries/{deliveryId}/accept:
     post:
       tags: [Delivery assignment]
