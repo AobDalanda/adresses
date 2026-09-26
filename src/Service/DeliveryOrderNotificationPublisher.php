@@ -86,8 +86,26 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         foreach ($drivers as $driver) {
             $notificationId = $this->persistNotification($eventId, $driver['driverId'], $deliveryId, $delivery, $driver['distanceMeters']);
             $payload = $this->payload($notificationId, $delivery, $driver['distanceMeters']);
-            $this->deliverMercure($notificationId, $driver['driverId'], $payload);
-            $this->deliverFcm($notificationId, $driver['driverId'], $payload);
+            $deliveryErrors = [];
+            try {
+                $this->deliverMercure($notificationId, $driver['driverId'], $payload);
+            } catch (\Throwable $exception) {
+                $deliveryErrors[] = $exception;
+            }
+            try {
+                $this->deliverFcm($notificationId, $driver['driverId'], $payload);
+            } catch (\Throwable $exception) {
+                $deliveryErrors[] = $exception;
+            }
+            if ($deliveryErrors !== []) {
+                throw new \RuntimeException(
+                    implode(' | ', array_map(
+                        static fn (\Throwable $exception): string => $exception->getMessage(),
+                        $deliveryErrors,
+                    )),
+                    previous: $deliveryErrors[0],
+                );
+            }
         }
     }
 

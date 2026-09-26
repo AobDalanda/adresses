@@ -143,4 +143,56 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
 
         self::assertTrue($notificationPersisted);
     }
+
+    public function testFcmIsAttemptedWhenMercureDeliveryFails(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')->willReturn([[
+            'driver_id' => 43,
+            'online' => true,
+            'effective_online' => true,
+            'location_age_seconds' => 30,
+            'accuracy_meters' => 15.0,
+            'distance_meters' => 42,
+            'service_compatible' => true,
+            'vehicle_compatible' => true,
+            'country_compatible' => true,
+            'account_validated' => true,
+        ]]);
+        $db->method('executeStatement')->willReturn(1);
+        $db->method('fetchOne')->willReturn('PENDING');
+        $db->method('fetchFirstColumn')->willReturn(['active-fcm-token']);
+
+        $hub = $this->createMock(HubInterface::class);
+        $hub->expects(self::once())
+            ->method('publish')
+            ->willThrowException(new \RuntimeException('Mercure unavailable'));
+        $push = $this->createMock(PushClientInterface::class);
+        $push->expects(self::once())
+            ->method('send');
+
+        $publisher = new DeliveryOrderNotificationPublisher(
+            $hub,
+            new NullLogger(),
+            $db,
+            $push,
+            1000,
+            new NearbyDriverMatcher($db, new NullLogger()),
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Mercure unavailable');
+        $publisher->handleQueuedDelivery('01a0df23-7593-7b50-9fec-44f16fb30b64', [
+            'id' => '01a0df23-7593-7b50-9fec-44f16fb30b64',
+            'pickupAddress' => [
+                'displayLabel' => 'Maison',
+                'latitude' => 48.039179881549,
+                'longitude' => -1.5393593162298,
+                'countryCode' => 'FR',
+            ],
+            'dropoffAddress' => ['displayLabel' => 'Bureau'],
+            'serviceType' => 'STANDARD',
+            'vehicleType' => 'MOTO',
+        ]);
+    }
 }
