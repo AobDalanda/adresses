@@ -98,6 +98,9 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                 $deliveryErrors[] = $exception;
             }
             if ($deliveryErrors !== []) {
+                if (count($deliveryErrors) < 2) {
+                    continue;
+                }
                 throw new \RuntimeException(
                     implode(' | ', array_map(
                         static fn (\Throwable $exception): string => $exception->getMessage(),
@@ -208,7 +211,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         $status = $sent === count($tokens) ? 'SENT' : ($sent > 0 ? 'PARTIAL' : 'FAILED');
         $error = $temporaryErrors === [] ? null : mb_substr(implode(' | ', $temporaryErrors), 0, 4000);
         $this->setPushResult($notificationId, $status, count($tokens), $error);
-        if ($temporaryErrors !== []) {
+        if ($temporaryErrors !== [] && $sent === 0) {
             throw new \RuntimeException($error ?? 'Temporary FCM failure.');
         }
     }
@@ -226,7 +229,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     private function isPermanentTokenFailure(\Throwable $exception): bool
     {
         $message = strtolower($exception->getMessage());
-        return str_contains($message, 'not registered') || str_contains($message, 'unregistered')
+        return str_contains($message, 'not registered') || str_contains($message, 'notregistered') || str_contains($message, 'unregistered')
             || str_contains($message, 'requested entity was not found') || str_contains($message, 'token not found');
     }
 

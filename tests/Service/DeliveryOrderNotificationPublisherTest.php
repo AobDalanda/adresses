@@ -180,8 +180,6 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
             new NearbyDriverMatcher($db, new NullLogger()),
         );
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Mercure unavailable');
         $publisher->handleQueuedDelivery('01a0df23-7593-7b50-9fec-44f16fb30b64', [
             'id' => '01a0df23-7593-7b50-9fec-44f16fb30b64',
             'pickupAddress' => [
@@ -194,5 +192,55 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
             'serviceType' => 'STANDARD',
             'vehicleType' => 'MOTO',
         ]);
+    }
+
+    public function testNotRegisteredWithoutSpaceIsAPermanentTokenFailure(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')->willReturn([[
+            'driver_id' => 43,
+            'online' => true,
+            'effective_online' => true,
+            'location_age_seconds' => 30,
+            'accuracy_meters' => 15.0,
+            'distance_meters' => 42,
+            'service_compatible' => true,
+            'vehicle_compatible' => true,
+            'country_compatible' => true,
+            'account_validated' => true,
+        ]]);
+        $db->method('fetchOne')->willReturn('PENDING');
+        $db->method('fetchFirstColumn')->willReturn(['expired-token']);
+        $disabled = false;
+        $db->expects(self::atLeastOnce())
+            ->method('executeStatement')
+            ->willReturnCallback(static function (string $sql) use (&$disabled): int {
+                if (str_contains($sql, 'UPDATE user_push_device SET enabled = FALSE')) {
+                    $disabled = true;
+                }
+
+                return 1;
+            });
+
+        $hub = $this->createMock(HubInterface::class);
+        $hub->method('publish')->willReturn('mercure-event-id');
+        $push = $this->createMock(PushClientInterface::class);
+        $push->method('send')->willThrowException(new \RuntimeException('FCM send failed: NotRegistered'));
+
+        $publisher = new DeliveryOrderNotificationPublisher(
+            $hub,
+            new NullLogger(),
+            $db,
+            $push,
+            1000,
+            new NearbyDriverMatcher($db, new NullLogger()),
+        );
+        $publisher->handleQueuedDelivery('01a0df23-7593-7b50-9fec-44f16fb30b64', [
+            'id' => '01a0df23-7593-7b50-9fec-44f16fb30b64',
+            'pickupAddress' => ['latitude' => 48.039, 'longitude' => -1.539, 'countryCode' => 'FR'],
+            'serviceType' => 'STANDARD',
+            'vehicleType' => 'MOTO',
+        ]);
+        self::assertTrue($disabled);
     }
 }
