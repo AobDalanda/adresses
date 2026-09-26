@@ -24,10 +24,11 @@ final class FcmPushClient implements PushClientInterface
     }
 
     /**
-     * @param array<string, string> $data
+     * @param array<string, scalar> $data
      */
     public function send(string $fcmToken, string $title, string $body, array $data = []): void
     {
+        $data = array_map(static fn (mixed $value): string => (string) $value, $data);
         $message = CloudMessage::new()
             ->toToken($fcmToken)
             ->withNotification(Notification::create($title, $body))

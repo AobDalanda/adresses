@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 
 final class DriverLocationRequestMapper
 {
-    public function mapLocation(Request $request): DriverLocationInput
+    public function mapLocation(Request $request, ?int $authenticatedDriverId = null): DriverLocationInput
     {
         try {
             $payload = json_decode($request->getContent(), true, 512, JSON_THROW_ON_ERROR);
@@ -23,7 +23,7 @@ final class DriverLocationRequestMapper
         }
 
         return new DriverLocationInput(
-            $this->requiredInt($payload, 'driverId'),
+            $authenticatedDriverId ?? $this->requiredInt($payload, 'driverId'),
             $this->requiredFloat($payload, 'latitude'),
             $this->requiredFloat($payload, 'longitude'),
             $this->requiredFloat($payload, 'accuracy'),

@@ -345,13 +345,17 @@ final class DeliveryCreateService
                 'displayLabel' => $pickup['address_name'] !== null ? (string) $pickup['address_name'] : null,
                 'latitude' => (float) $pickup['latitude'],
                 'longitude' => (float) $pickup['longitude'],
+                'countryCode' => is_string($pickup['country_code'] ?? null) ? strtoupper($pickup['country_code']) : null,
             ],
             'dropoffAddress' => [
                 'id' => (int) $dropoff['address_id'],
                 'displayLabel' => $dropoff['address_name'] !== null ? (string) $dropoff['address_name'] : null,
                 'latitude' => (float) $dropoff['latitude'],
                 'longitude' => (float) $dropoff['longitude'],
+                'countryCode' => is_string($dropoff['country_code'] ?? null) ? strtoupper($dropoff['country_code']) : null,
             ],
+            'serviceType' => $payload['serviceType'],
+            'vehicleType' => $payload['vehicleType'],
             'recipient' => $recipient,
             'package' => $package,
             'pricing' => [

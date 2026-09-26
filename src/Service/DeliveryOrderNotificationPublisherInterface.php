@@ -12,4 +12,7 @@ interface DeliveryOrderNotificationPublisherInterface
      * @param array<string, mixed> $delivery
      */
     public function publishNewDeliveryOrder(array $delivery): bool;
+
+    /** @param array<string, mixed> $delivery */
+    public function handleQueuedDelivery(string $eventId, array $delivery): void;
 }

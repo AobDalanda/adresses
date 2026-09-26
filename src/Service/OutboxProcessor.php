@@ -15,6 +15,7 @@ class OutboxProcessor
         private readonly ProviderAutomaticCheckService $automaticChecks,
         private readonly ProviderNotificationService $notifications,
         private readonly DeliveryLocationPublisher $deliveryLocations,
+        private readonly ?DeliveryOrderNotificationPublisherInterface $deliveryNotifications = null,
     ) {
     }
 
@@ -52,8 +53,10 @@ class OutboxProcessor
         }
 
         try {
+            // Dispatch outside a database transaction: notification rows and channel
+            // results must remain durable when Mercure/FCM raises a transient error.
+            $this->dispatch($claimed);
             $this->db->transactional(function () use ($claimed): void {
-                $this->dispatch($claimed);
                 $updated = $this->db->executeStatement(
                     <<<'SQL'
                         UPDATE outbox_event
@@ -208,6 +211,15 @@ class OutboxProcessor
             ? $event['payload']
             : json_decode((string) $event['payload'], true, flags: JSON_THROW_ON_ERROR);
         $eventName = (string) $event['event_name'];
+
+        if ($eventName === 'delivery_order.created') {
+            if ($this->deliveryNotifications === null) {
+                throw new \LogicException('Delivery notification handler is not configured.');
+            }
+            $this->deliveryNotifications->handleQueuedDelivery((string) $event['id'], $payload);
+
+            return;
+        }
 
         if ($eventName === 'delivery.location.updated') {
             $this->deliveryLocations->publish($payload);

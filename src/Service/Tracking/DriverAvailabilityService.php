@@ -21,15 +21,35 @@ final readonly class DriverAvailabilityService
         $row = $this->db->fetchAssociative(
             <<<'SQL'
                 SELECT
-                    is_online,
-                    changed_at,
-                    last_heartbeat_at,
-                    is_online = TRUE
-                        AND last_heartbeat_at >= now() - (:presenceTtl * INTERVAL '1 second') AS effective_online
-                FROM driver_availability
-                WHERE driver_id = :driverId
+                    availability.is_online,
+                    availability.changed_at,
+                    availability.last_heartbeat_at,
+                    availability.is_online = TRUE
+                        AND profile.validation_status = 'approved'
+                        AND profile.can_deliver = TRUE
+                        AND authorization.id IS NOT NULL
+                        AND latest.recorded_at >= now() - (:presenceTtl * INTERVAL '1 second')
+                        AND latest.accuracy <= :maxAccuracy
+                        AND latest.is_mocked = FALSE
+                        AND latest.is_suspect = FALSE AS effective_online
+                FROM driver_availability availability
+                JOIN provider_profile profile ON profile.user_id = availability.driver_id
+                LEFT JOIN provider_authorization authorization
+                  ON authorization.provider_profile_id = profile.id AND authorization.status = 'ACTIVE'
+                LEFT JOIN LATERAL (
+                    SELECT recorded_at, accuracy, is_mocked, is_suspect
+                    FROM driver_location
+                    WHERE driver_id = availability.driver_id
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                ) latest ON TRUE
+                WHERE availability.driver_id = :driverId
                 SQL,
-            ['driverId' => $driverId, 'presenceTtl' => $this->presenceTtlSeconds],
+            [
+                'driverId' => $driverId,
+                'presenceTtl' => $this->presenceTtlSeconds,
+                'maxAccuracy' => $this->maxLocationAccuracyMeters,
+            ],
         );
 
         if ($row === false) {
@@ -118,13 +138,13 @@ final readonly class DriverAvailabilityService
                   AND EXISTS (
                       SELECT 1
                       FROM LATERAL (
-                          SELECT created_at, accuracy, is_mocked, is_suspect
+                          SELECT recorded_at, accuracy, is_mocked, is_suspect
                           FROM driver_location
                           WHERE driver_id = :driverId
                           ORDER BY created_at DESC, id DESC
                           LIMIT 1
                       ) latest
-                      WHERE latest.created_at >= now() - (:presenceTtl * INTERVAL '1 second')
+                      WHERE latest.recorded_at >= now() - (:presenceTtl * INTERVAL '1 second')
                         AND latest.accuracy <= :maxAccuracy
                         AND latest.is_mocked = FALSE
                         AND latest.is_suspect = FALSE

@@ -7,7 +7,7 @@ namespace App\Service;
 interface PushClientInterface
 {
     /**
-     * @param array<string, string> $data
+     * @param array<string, scalar> $data
      */
     public function send(string $fcmToken, string $title, string $body, array $data = []): void;
 }

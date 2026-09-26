@@ -34,7 +34,10 @@ final class DriverLocationUpdateAction extends AbstractDriverTrackingAction
         }
 
         try {
-            $input = $this->requestMapper->mapLocation($request);
+            if ($identity->userId === null) {
+                return new JsonResponse(['message' => 'Unauthorized'], 401);
+            }
+            $input = $this->requestMapper->mapLocation($request, $identity->userId);
         } catch (\InvalidArgumentException $exception) {
             $this->trackingLogger->notice('Invalid GPS payload', ['message' => $exception->getMessage()]);
 

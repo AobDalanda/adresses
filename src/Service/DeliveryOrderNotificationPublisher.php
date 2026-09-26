@@ -12,59 +12,76 @@ use Symfony\Component\Uid\Uuid;
 
 final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrderNotificationPublisherInterface
 {
-    private const NOTIFICATION_TYPE = 'delivery_order.created';
-    private const NOTIFICATION_TITLE = 'Nouvelle livraison';
-    private const NOTIFICATION_BODY = 'Une nouvelle livraison est disponible.';
-    private const NOTIFICATION_ICON = 'ic_stat_delivery';
-    private const NOTIFICATION_COLOR = '#0F766E';
+    private const TYPE = 'delivery_order.created';
+
     public function __construct(
         private HubInterface $hub,
         private LoggerInterface $logger,
         private Connection $db,
         private PushClientInterface $push,
         private int $maxDistanceMeters = 1000,
-        private int $maxLocationAccuracyMeters = 100,
-        private int $presenceTtlSeconds = 120,
+        private ?NearbyDriverMatcher $matcher = null,
     ) {
     }
 
-    /**
-     * @param array<string, mixed> $delivery
-     */
+    /** @param array<string, mixed> $delivery */
     public function publishNewDeliveryOrder(array $delivery): bool
     {
-        $payload = [
-            'type' => 'delivery_order.created',
-            'delivery' => [
-                'id' => $delivery['id'] ?? null,
-                'status' => $delivery['status'] ?? null,
-                'pickupAddress' => $delivery['pickupAddress'] ?? null,
-                'dropoffAddress' => $delivery['dropoffAddress'] ?? null,
-                'pricing' => [
-                    'totalAmount' => $delivery['pricing']['totalAmount'] ?? null,
-                    'currency' => $delivery['pricing']['currency'] ?? null,
-                    'distanceKm' => $delivery['pricing']['distanceKm'] ?? null,
-                    'durationMinutes' => $delivery['pricing']['durationMinutes'] ?? null,
-                ],
-                'scheduledAt' => $delivery['scheduledAt'] ?? null,
-                'createdAt' => $delivery['createdAt'] ?? null,
-            ],
-        ];
+        $deliveryId = (string) ($delivery['id'] ?? '');
+        if (!Uuid::isValid($deliveryId)) {
+            return false;
+        }
 
         try {
-            $sourceEventId = $this->recordDeliveryOutboxEvent($payload);
-            $targets = $this->fetchEligibleDriverTargets($payload);
-            $this->publishDriverNotifications($sourceEventId, $payload, $targets);
-            $this->publishMercureNotifications($payload, array_keys($targets));
+            $this->db->executeStatement(
+                <<<'SQL'
+                    INSERT INTO outbox_event (
+                        id, aggregate_type, aggregate_id, event_name, payload,
+                        occurred_at, published_at, attempts
+                    ) VALUES (
+                        :id, 'delivery_order', :deliveryId, :eventName, CAST(:payload AS jsonb),
+                        now(), NULL, 0
+                    ) ON CONFLICT (id) DO NOTHING
+                    SQL,
+                [
+                    'id' => $deliveryId,
+                    'deliveryId' => $deliveryId,
+                    'eventName' => self::TYPE,
+                    'payload' => json_encode($delivery, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+                ],
+            );
 
             return true;
         } catch (\Throwable $exception) {
-            $this->logger->error('New delivery order notification failed', [
-                'deliveryId' => $delivery['id'] ?? null,
-                'exception' => $exception,
-            ]);
+            $this->logger->error('Delivery notification enqueue failed.', ['deliveryId' => $deliveryId, 'exception' => $exception]);
 
             return false;
+        }
+    }
+
+    /** @param array<string, mixed> $delivery */
+    public function handleQueuedDelivery(string $eventId, array $delivery): void
+    {
+        $pickup = is_array($delivery['pickupAddress'] ?? null) ? $delivery['pickupAddress'] : [];
+        $deliveryId = (string) ($delivery['id'] ?? '');
+        if ($this->matcher === null) {
+            throw new \LogicException('NearbyDriverMatcher is required by the outbox worker.');
+        }
+        $drivers = $this->matcher->findEligibleDrivers(
+            $this->coordinate($pickup['latitude'] ?? null, -90, 90),
+            $this->coordinate($pickup['longitude'] ?? null, -180, 180),
+            (string) ($delivery['serviceType'] ?? ''),
+            (string) ($delivery['vehicleType'] ?? ''),
+            $this->maxDistanceMeters,
+            is_string($pickup['countryCode'] ?? null) ? $pickup['countryCode'] : null,
+            $deliveryId,
+        );
+
+        foreach ($drivers as $driver) {
+            $notificationId = $this->persistNotification($eventId, $driver['driverId'], $deliveryId, $delivery, $driver['distanceMeters']);
+            $payload = $this->payload($notificationId, $delivery, $driver['distanceMeters']);
+            $this->deliverMercure($notificationId, $driver['driverId'], $payload);
+            $this->deliverFcm($notificationId, $driver['driverId'], $payload);
         }
     }
 
@@ -73,391 +90,135 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         return sprintf(self::NEW_DELIVERY_ORDER_TOPIC_TEMPLATE, $driverId);
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function recordDeliveryOutboxEvent(array $payload): string
+    /** @param array<string, mixed> $delivery */
+    private function persistNotification(string $eventId, int $userId, string $deliveryId, array $delivery, int $distanceMeters): string
     {
-        $deliveryId = (string) ($payload['delivery']['id'] ?? '');
-        $sourceEventId = Uuid::isValid($deliveryId) ? $deliveryId : Uuid::v7()->toRfc4122();
-
-        $this->db->executeStatement(
-            <<<'SQL'
-                INSERT INTO outbox_event (
-                    id, aggregate_type, aggregate_id, event_name, payload,
-                    occurred_at, published_at, attempts
-                )
-                VALUES (
-                    :id, 'delivery_order', :aggregateId, :eventName, CAST(:payload AS jsonb),
-                    now(), now(), 1
-                )
-                ON CONFLICT (id) DO NOTHING
-                SQL,
-            [
-                'id' => $sourceEventId,
-                'aggregateId' => $deliveryId,
-                'eventName' => self::NOTIFICATION_TYPE,
-                'payload' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
-            ],
-        );
-
-        return $sourceEventId;
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function publishDriverNotifications(string $sourceEventId, array $payload, array $targets): void
-    {
-        if ($targets === []) {
-            $this->logger->info('No eligible driver registered for new delivery notification', [
-                'deliveryId' => $payload['delivery']['id'] ?? null,
-            ]);
-
-            return;
-        }
-
-        $totalTokens = 0;
-        $sent = 0;
-        $failed = 0;
-
-        foreach ($targets as $userId => $tokens) {
-            $notificationId = $this->persistNotification($sourceEventId, (int) $userId, $payload);
-            if ($notificationId === null) {
-                continue;
-            }
-
-            if ($tokens === []) {
-                $this->setPushResult($notificationId, 'SKIPPED', 0, null);
-                continue;
-            }
-
-            $result = $this->sendPushNotifications($notificationId, $tokens, $payload);
-            $totalTokens += count($tokens);
-            $sent += $result['sent'];
-            $failed += $result['failed'];
-
-            $status = $result['sent'] === count($tokens) ? 'SENT' : ($result['sent'] > 0 ? 'PARTIAL' : 'FAILED');
-            $this->setPushResult($notificationId, $status, count($tokens), $result['error']);
-        }
-
-        $this->logger->info('Driver FCM new delivery notification completed', [
-            'deliveryId' => $payload['delivery']['id'] ?? null,
-            'targetedTokens' => $totalTokens,
-            'sent' => $sent,
-            'failed' => $failed,
-        ]);
-    }
-
-    /**
-     * @return array<int, list<string>>
-     */
-    private function fetchEligibleDriverTargets(array $payload): array
-    {
-        $pickup = $payload['delivery']['pickupAddress'] ?? null;
-        if (
-            !is_array($pickup)
-            || !is_numeric($pickup['latitude'] ?? null)
-            || !is_numeric($pickup['longitude'] ?? null)
-        ) {
-            $this->logger->warning('New delivery notification skipped: invalid pickup coordinates', [
-                'deliveryId' => $payload['delivery']['id'] ?? null,
-            ]);
-
-            return [];
-        }
-
-        $latitude = (float) $pickup['latitude'];
-        $longitude = (float) $pickup['longitude'];
-        if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
-            $this->logger->warning('New delivery notification skipped: pickup coordinates out of range', [
-                'deliveryId' => $payload['delivery']['id'] ?? null,
-            ]);
-
-            return [];
-        }
-
-        $rows = $this->db->fetchAllAssociative(
-            <<<'SQL'
-                SELECT DISTINCT account.id AS user_id, device.token
-                FROM user_account account
-                JOIN provider_profile profile ON profile.user_id = account.id
-                JOIN provider_authorization provider_auth
-                    ON provider_auth.provider_profile_id = profile.id
-                   AND provider_auth.status = 'ACTIVE'
-                JOIN driver_availability availability
-                  ON availability.driver_id = account.id
-                 AND availability.is_online = TRUE
-                 AND availability.last_heartbeat_at >= now() - (:presenceTtl * INTERVAL '1 second')
-                JOIN LATERAL (
-                    SELECT location.position, location.accuracy, location.is_mocked, location.is_suspect,
-                           location.created_at
-                    FROM driver_location location
-                    WHERE location.driver_id = account.id
-                    ORDER BY location.created_at DESC, location.id DESC
-                    LIMIT 1
-                ) latest_location ON TRUE
-                LEFT JOIN user_push_device device
-                    ON device.user_id = account.id
-                   AND device.enabled = TRUE
-                WHERE profile.can_deliver = TRUE
-                  AND profile.validation_status = 'approved'
-                  AND latest_location.created_at >= now() - (:presenceTtl * INTERVAL '1 second')
-                  AND latest_location.is_mocked = FALSE
-                  AND latest_location.is_suspect = FALSE
-                  AND latest_location.accuracy <= :maxAccuracy
-                  AND ST_DWithin(
-                      latest_location.position,
-                      ST_SetSRID(ST_MakePoint(:pickupLongitude, :pickupLatitude), 4326)::geography,
-                      :radiusMeters
-                  )
-                SQL,
-            [
-                'presenceTtl' => $this->presenceTtlSeconds,
-                'maxAccuracy' => $this->maxLocationAccuracyMeters,
-                'pickupLongitude' => $longitude,
-                'pickupLatitude' => $latitude,
-                'radiusMeters' => $this->maxDistanceMeters,
-            ],
-        );
-
-        $targets = [];
-        foreach ($rows as $row) {
-            $userId = (int) $row['user_id'];
-            $targets[$userId] ??= [];
-
-            if (is_string($row['token'] ?? null) && $row['token'] !== '') {
-                $targets[$userId][] = $row['token'];
-            }
-        }
-
-        foreach ($targets as $userId => $tokens) {
-            $targets[$userId] = array_values(array_unique($tokens));
-        }
-
-        return $targets;
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     * @param list<int> $driverIds
-     */
-    private function publishMercureNotifications(array $payload, array $driverIds): void
-    {
-        $data = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-
-        foreach ($driverIds as $driverId) {
-            $topic = self::topicForDriver($driverId);
-            try {
-                $this->hub->publish(new Update($topic, $data, private: true));
-            } catch (\Throwable $exception) {
-                $this->logger->error('Mercure new delivery order notification failed', [
-                    'deliveryId' => $payload['delivery']['id'] ?? null,
-                    'driverId' => $driverId,
-                    'topic' => $topic,
-                    'exception' => $exception,
-                ]);
-            }
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function persistNotification(string $sourceEventId, int $userId, array $payload): ?string
-    {
-        $notificationId = Uuid::v7()->toRfc4122();
-        $content = $this->buildNotificationContent($payload);
+        $id = Uuid::v7()->toRfc4122();
+        $payload = $this->payload($id, $delivery, $distanceMeters);
         $inserted = $this->db->executeStatement(
             <<<'SQL'
                 INSERT INTO user_notification (
-                    id, user_id, source_event_id, type, title, body, data,
-                    push_status, created_at
-                )
-                VALUES (
-                    :id, :userId, :sourceEventId, :type, :title, :body, CAST(:data AS jsonb),
-                    'PENDING', now()
-                )
-                ON CONFLICT (source_event_id, user_id) DO NOTHING
+                    id, user_id, source_event_id, delivery_id, type, title, body, data,
+                    push_status, mercure_status, created_at
+                ) VALUES (
+                    :id, :userId, :eventId, :deliveryId, :type, :title, :body, CAST(:data AS jsonb),
+                    'PENDING', 'PENDING', now()
+                ) ON CONFLICT (source_event_id, user_id) DO NOTHING
                 SQL,
             [
-                'id' => $notificationId,
-                'userId' => $userId,
-                'sourceEventId' => $sourceEventId,
-                'type' => self::NOTIFICATION_TYPE,
-                'title' => $content['title'],
-                'body' => $content['body'],
+                'id' => $id, 'userId' => $userId, 'eventId' => $eventId, 'deliveryId' => $deliveryId,
+                'type' => self::TYPE, 'title' => 'Nouvelle livraison',
+                'body' => sprintf('%s → %s', $payload['pickupAddress'], $payload['dropoffAddress']),
                 'data' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
             ],
         );
+        if ($inserted === 1) {
+            return $id;
+        }
 
-        return $inserted === 1 ? $notificationId : null;
+        $existing = $this->db->fetchOne(
+            'SELECT id FROM user_notification WHERE source_event_id = :eventId AND user_id = :userId',
+            ['eventId' => $eventId, 'userId' => $userId],
+        );
+        if (!is_string($existing) || $existing === '') {
+            throw new \RuntimeException('Unable to recover idempotent delivery notification.');
+        }
+
+        return $existing;
     }
 
-    /**
-     * @param list<string> $tokens
-     * @param array<string, mixed> $payload
-     * @return array{sent: int, failed: int, error: ?string}
-     */
-    private function sendPushNotifications(string $notificationId, array $tokens, array $payload): array
+    /** @param array<string, mixed> $delivery @return array<string, mixed> */
+    private function payload(string $notificationId, array $delivery, int $distanceMeters): array
     {
-        $sent = 0;
-        $errors = [];
-        $content = $this->buildNotificationContent($payload);
-        $data = [
-            'type' => self::NOTIFICATION_TYPE,
+        return [
+            'type' => self::TYPE,
             'notificationId' => $notificationId,
-            'deliveryId' => (string) ($payload['delivery']['id'] ?? ''),
-            'status' => (string) ($payload['delivery']['status'] ?? ''),
-            'collapseKey' => 'delivery_order.' . (string) ($payload['delivery']['id'] ?? ''),
-            'notificationGroup' => 'delivery_order',
-            'notificationIcon' => self::NOTIFICATION_ICON,
-            'notificationColor' => self::NOTIFICATION_COLOR,
+            'deliveryId' => (string) ($delivery['id'] ?? ''),
+            'pickupAddress' => $this->addressLabel($delivery['pickupAddress'] ?? null, 'Départ'),
+            'dropoffAddress' => $this->addressLabel($delivery['dropoffAddress'] ?? null, 'Destination'),
+            'distanceMeters' => $distanceMeters,
         ];
+    }
 
+    /** @param array<string, mixed> $payload */
+    private function deliverMercure(string $notificationId, int $driverId, array $payload): void
+    {
+        if ($this->db->fetchOne('SELECT mercure_status FROM user_notification WHERE id = :id', ['id' => $notificationId]) === 'SENT') {
+            return;
+        }
+        try {
+            $this->hub->publish(new Update(self::topicForDriver($driverId), json_encode($payload, JSON_THROW_ON_ERROR), private: true));
+            $this->setMercureResult($notificationId, 'SENT', null);
+        } catch (\Throwable $exception) {
+            $this->setMercureResult($notificationId, 'FAILED', $exception->getMessage());
+            throw $exception;
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function deliverFcm(string $notificationId, int $driverId, array $payload): void
+    {
+        if (in_array($this->db->fetchOne('SELECT push_status FROM user_notification WHERE id = :id', ['id' => $notificationId]), ['SENT', 'SKIPPED'], true)) {
+            return;
+        }
+        $tokens = $this->db->fetchFirstColumn('SELECT token FROM user_push_device WHERE user_id = :userId AND enabled = TRUE', ['userId' => $driverId]);
+        if ($tokens === []) {
+            $this->setPushResult($notificationId, 'SKIPPED', 0, null);
+            return;
+        }
+
+        $sent = 0;
+        $temporaryErrors = [];
         foreach ($tokens as $token) {
             try {
-                $this->push->send(
-                    (string) $token,
-                    $content['title'],
-                    $content['body'],
-                    $data,
-                );
+                $this->push->send((string) $token, 'Nouvelle livraison', sprintf('%s → %s', $payload['pickupAddress'], $payload['dropoffAddress']), $payload);
                 ++$sent;
             } catch (\Throwable $exception) {
-                $errors[] = $exception->getMessage();
-                if ($this->isPermanentPushTokenFailure($exception)) {
-                    $this->disablePushDeviceToken((string) $token, $exception->getMessage());
+                if ($this->isPermanentTokenFailure($exception)) {
+                    $this->db->executeStatement('UPDATE user_push_device SET enabled = FALSE, updated_at = now() WHERE token_hash = :hash', ['hash' => hash('sha256', (string) $token)]);
+                } else {
+                    $temporaryErrors[] = $exception->getMessage();
                 }
-
-                $this->logger->warning('Driver FCM new delivery notification failed', [
-                    'deliveryId' => $payload['delivery']['id'] ?? null,
-                    'exception' => $exception,
-                ]);
             }
         }
-
-        return [
-            'sent' => $sent,
-            'failed' => count($errors),
-            'error' => $errors === [] ? null : mb_substr(implode(' | ', $errors), 0, 4000),
-        ];
+        $status = $sent === count($tokens) ? 'SENT' : ($sent > 0 ? 'PARTIAL' : 'FAILED');
+        $error = $temporaryErrors === [] ? null : mb_substr(implode(' | ', $temporaryErrors), 0, 4000);
+        $this->setPushResult($notificationId, $status, count($tokens), $error);
+        if ($temporaryErrors !== []) {
+            throw new \RuntimeException($error ?? 'Temporary FCM failure.');
+        }
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array{title: string, body: string}
-     */
-    private function buildNotificationContent(array $payload): array
+    private function setMercureResult(string $id, string $status, ?string $error): void
     {
-        $delivery = is_array($payload['delivery'] ?? null) ? $payload['delivery'] : [];
-        $pricing = is_array($delivery['pricing'] ?? null) ? $delivery['pricing'] : [];
-
-        $amount = $this->formatAmount($pricing['totalAmount'] ?? null, $pricing['currency'] ?? null);
-        $distance = $this->formatDistance($pricing['distanceKm'] ?? null);
-        $pickup = $this->addressLabel($delivery['pickupAddress'] ?? null, 'Départ');
-        $dropoff = $this->addressLabel($delivery['dropoffAddress'] ?? null, 'Destination');
-
-        $title = $amount === null
-            ? self::NOTIFICATION_TITLE
-            : sprintf('%s - %s', self::NOTIFICATION_TITLE, $amount);
-
-        $parts = [];
-        if ($pickup !== null || $dropoff !== null) {
-            $parts[] = sprintf('%s -> %s', $pickup ?? 'Départ', $dropoff ?? 'Destination');
-        }
-
-        if ($distance !== null) {
-            $parts[] = $distance;
-        }
-
-        return [
-            'title' => $title,
-            'body' => $parts === [] ? self::NOTIFICATION_BODY : implode(' · ', $parts),
-        ];
+        $this->db->executeStatement('UPDATE user_notification SET mercure_status = :status, mercure_last_error = :error WHERE id = :id', ['id' => $id, 'status' => $status, 'error' => $error]);
     }
 
-    private function formatAmount(mixed $amount, mixed $currency): ?string
+    private function setPushResult(string $id, string $status, int $attempts, ?string $error): void
     {
-        if (!is_int($amount) && !is_float($amount) && !is_numeric($amount)) {
-            return null;
-        }
-
-        $normalizedCurrency = is_string($currency) && $currency !== '' ? strtoupper($currency) : 'GNF';
-        $formattedAmount = number_format((float) $amount, 0, ',', ' ');
-
-        return sprintf('%s %s', $formattedAmount, $normalizedCurrency);
+        $this->db->executeStatement('UPDATE user_notification SET push_status = :status, push_attempts = push_attempts + :attempts, push_last_error = :error WHERE id = :id', ['id' => $id, 'status' => $status, 'attempts' => $attempts, 'error' => $error]);
     }
 
-    private function formatDistance(mixed $distanceKm): ?string
-    {
-        if (!is_int($distanceKm) && !is_float($distanceKm) && !is_numeric($distanceKm)) {
-            return null;
-        }
-
-        return sprintf('%s km', number_format((float) $distanceKm, 1, ',', ' '));
-    }
-
-    private function addressLabel(mixed $address, string $fallback): ?string
-    {
-        if (!is_array($address)) {
-            return null;
-        }
-
-        $label = $address['displayLabel'] ?? null;
-        if (!is_string($label) || trim($label) === '') {
-            return $fallback;
-        }
-
-        return mb_substr(trim($label), 0, 80);
-    }
-
-    private function isPermanentPushTokenFailure(\Throwable $exception): bool
+    private function isPermanentTokenFailure(\Throwable $exception): bool
     {
         $message = strtolower($exception->getMessage());
-
-        return str_contains($message, 'requested entity was not found')
-            || str_contains($message, 'token not found')
-            || str_contains($message, 'registration token is not registered')
-            || str_contains($message, 'registration-token-not-registered')
-            || str_contains($message, 'unregistered');
+        return str_contains($message, 'not registered') || str_contains($message, 'unregistered')
+            || str_contains($message, 'requested entity was not found') || str_contains($message, 'token not found');
     }
 
-    private function disablePushDeviceToken(string $token, string $reason): void
+    private function coordinate(mixed $value, float $minimum, float $maximum): float
     {
-        $this->db->executeStatement(
-            <<<'SQL'
-                UPDATE user_push_device
-                SET enabled = FALSE,
-                    updated_at = now()
-                WHERE token_hash = :tokenHash
-                  AND enabled = TRUE
-                SQL,
-            ['tokenHash' => hash('sha256', $token)],
-        );
-
-        $this->logger->info('Disabled stale FCM push token after permanent failure', [
-            'tokenHashPrefix' => substr(hash('sha256', $token), 0, 12),
-            'reason' => mb_substr($reason, 0, 240),
-        ]);
+        if (!is_numeric($value) || !is_finite((float) $value) || (float) $value < $minimum || (float) $value > $maximum) {
+            throw new \UnexpectedValueException('Invalid pickup coordinates.');
+        }
+        return (float) $value;
     }
 
-    private function setPushResult(string $notificationId, string $status, int $attempts, ?string $error): void
+    private function addressLabel(mixed $address, string $fallback): string
     {
-        $this->db->executeStatement(
-            <<<'SQL'
-                UPDATE user_notification
-                SET push_status = :status,
-                    push_attempts = :attempts,
-                    push_last_error = :error
-                WHERE id = :id
-                SQL,
-            [
-                'id' => $notificationId,
-                'status' => $status,
-                'attempts' => $attempts,
-                'error' => $error,
-            ],
-        );
+        if (!is_array($address) || !is_string($address['displayLabel'] ?? null) || trim($address['displayLabel']) === '') {
+            return $fallback;
+        }
+        return mb_substr(trim($address['displayLabel']), 0, 160);
     }
 }
