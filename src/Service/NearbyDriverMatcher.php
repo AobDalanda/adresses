@@ -217,6 +217,16 @@ final readonly class NearbyDriverMatcher
                     evaluated_at = EXCLUDED.evaluated_at
                 SQL,
             $diagnostic + ['deliveryId' => $deliveryId],
+            [
+                'deliveryId' => ParameterType::STRING,
+                'driverId' => ParameterType::INTEGER,
+                'online' => ParameterType::BOOLEAN,
+                'effectiveOnline' => ParameterType::BOOLEAN,
+                'locationAgeSeconds' => ParameterType::INTEGER,
+                'distanceMeters' => ParameterType::INTEGER,
+                'eligible' => ParameterType::BOOLEAN,
+                'rejectionReason' => ParameterType::STRING,
+            ],
         );
     }
 

@@ -73,6 +73,41 @@ final class NearbyDriverMatcherTest extends TestCase
         self::assertSame('COUNTRY_NOT_COMPATIBLE', $diagnostics[0]['rejectionReason']);
     }
 
+    public function testPersistsDiagnosticBooleansWithExplicitDbalTypes(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')
+            ->willReturn([$this->eligibleDriverRow(countryCompatible: true)]);
+        $db->expects(self::once())
+            ->method('executeStatement')
+            ->with(
+                self::stringContains('INSERT INTO delivery_matching_diagnostic'),
+                self::callback(static fn (array $parameters): bool =>
+                    $parameters['driverId'] === 43
+                    && $parameters['online'] === true
+                    && $parameters['effectiveOnline'] === true
+                    && $parameters['eligible'] === true
+                ),
+                self::callback(static fn (array $types): bool =>
+                    $types['online'] === ParameterType::BOOLEAN
+                    && $types['effectiveOnline'] === ParameterType::BOOLEAN
+                    && $types['eligible'] === ParameterType::BOOLEAN
+                ),
+            )
+            ->willReturn(1);
+
+        $matcher = new NearbyDriverMatcher($db, new NullLogger());
+        $matcher->findEligibleDrivers(
+            48.039179881549,
+            -1.5393593162298,
+            'STANDARD',
+            'MOTO',
+            1000,
+            'FR',
+            '01a0df23-7593-7b50-9fec-44f16fb30b64',
+        );
+    }
+
     /** @return array<string, mixed> */
     private function eligibleDriverRow(bool $countryCompatible): array
     {
