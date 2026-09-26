@@ -6,6 +6,7 @@ namespace App\Tests\Service;
 
 use App\Service\NearbyDriverMatcher;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -22,10 +23,17 @@ final class NearbyDriverMatcherTest extends TestCase
                     && str_contains($sql, 'FROM user_address primary_address')
                     && str_contains($sql, 'latest_location.position IS NOT NULL')
                     && str_contains($sql, 'ST_DWithin(')
+                    && str_contains($sql, 'CAST(:pickupCountry AS VARCHAR(2)) IS NULL')
+                    && str_contains($sql, 'driver_address.country_code = CAST(:pickupCountry AS VARCHAR(2))')
                 ),
                 self::callback(static fn (array $parameters): bool =>
                     $parameters['pickupCountry'] === 'FR'
                     && $parameters['radiusMeters'] === 1000
+                ),
+                self::callback(static fn (array $types): bool =>
+                    $types['pickupCountry'] === ParameterType::STRING
+                    && $types['radiusMeters'] === ParameterType::INTEGER
+                    && $types['presenceTtl'] === ParameterType::INTEGER
                 ),
             )
             ->willReturn([$this->eligibleDriverRow(countryCompatible: true)]);

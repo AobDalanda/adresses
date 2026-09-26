@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Psr\Log\LoggerInterface;
 
 final readonly class NearbyDriverMatcher
@@ -100,13 +101,13 @@ final readonly class NearbyDriverMatcher
                           AND application.status = 'APPROVED'
                           AND vehicle.vehicle_type = :vehicleType
                     ) AS vehicle_compatible,
-                    (:pickupCountry IS NULL OR EXISTS (
+                    (CAST(:pickupCountry AS VARCHAR(2)) IS NULL OR EXISTS (
                         SELECT 1
                         FROM user_address ua
                         JOIN address driver_address ON driver_address.id = ua.address_id
                         WHERE ua.user_id = account.id
                           AND ua.is_primary = TRUE
-                          AND driver_address.country_code = :pickupCountry
+                          AND driver_address.country_code = CAST(:pickupCountry AS VARCHAR(2))
                     ) OR (
                         NOT EXISTS (
                             SELECT 1
@@ -147,6 +148,13 @@ final readonly class NearbyDriverMatcher
                 'pickupCountry' => $pickupCountryCode === null ? null : strtoupper($pickupCountryCode),
                 'vehicleType' => strtoupper($vehicleType),
                 'radiusMeters' => $radiusMeters,
+            ],
+            [
+                'presenceTtl' => ParameterType::INTEGER,
+                'maxAccuracy' => ParameterType::INTEGER,
+                'pickupCountry' => ParameterType::STRING,
+                'vehicleType' => ParameterType::STRING,
+                'radiusMeters' => ParameterType::INTEGER,
             ],
         );
 
