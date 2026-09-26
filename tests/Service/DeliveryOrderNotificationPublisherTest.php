@@ -232,7 +232,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
                 self::assertStringContainsString('JOIN provider_authorization provider_auth', $sql);
                 self::assertStringContainsString('JOIN driver_availability availability', $sql);
                 self::assertStringContainsString('ST_DWithin', $sql);
-                self::assertSame(10000, $params['radiusMeters']);
+                self::assertSame(1000, $params['radiusMeters']);
 
                 return $targets;
             });

@@ -22,7 +22,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         private LoggerInterface $logger,
         private Connection $db,
         private PushClientInterface $push,
-        private int $maxDistanceMeters = 10000,
+        private int $maxDistanceMeters = 1000,
         private int $maxLocationAccuracyMeters = 100,
         private int $presenceTtlSeconds = 120,
     ) {
