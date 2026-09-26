@@ -28,8 +28,13 @@ jobs:
                       echo "Rebuild application"
                       docker compose -f docker-compose.prod.yml build app
 
-                      echo "Restart application"
-                      docker compose -f docker-compose.prod.yml up -d app
+                      echo "Restart application and worker from the same image"
+                      docker compose -f docker-compose.prod.yml up -d --force-recreate app worker
+
+                      echo "Verify application and worker image consistency"
+                      APP_IMAGE_ID="$(docker inspect --format '{{.Image}}' aldahim_app)"
+                      WORKER_IMAGE_ID="$(docker inspect --format '{{.Image}}' aldahim_worker)"
+                      test "$APP_IMAGE_ID" = "$WORKER_IMAGE_ID"
 
                       echo "Run migrations"
                       docker exec aldahim_app php bin/console doctrine:migrations:migrate --no-interaction

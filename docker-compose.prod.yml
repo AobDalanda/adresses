@@ -2,6 +2,7 @@ services:
   app:
     build:
       context: .
+    image: aldahim-app:latest
 
     container_name: aldahim_app
 
@@ -31,7 +32,7 @@ services:
       - "traefik.http.services.app.loadbalancer.server.port=80"
 
   worker:
-    image: app-app
+    image: aldahim-app:latest
     container_name: aldahim_worker
     restart: unless-stopped
     healthcheck:
