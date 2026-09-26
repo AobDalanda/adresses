@@ -14,7 +14,7 @@ services:
     environment:
       FIREBASE_CREDENTIALS: /run/secrets/firebase_credentials
       DRIVER_NOTIFICATION_RADIUS_METERS: ${DRIVER_NOTIFICATION_RADIUS_METERS:-1000}
-      DRIVER_PRESENCE_TTL_SECONDS: ${DRIVER_PRESENCE_TTL_SECONDS:-120}
+      DRIVER_PRESENCE_TTL_SECONDS: ${DRIVER_PRESENCE_TTL_SECONDS:-180}
       DRIVER_LOCATION_MAX_ACCURACY_METERS: ${DRIVER_LOCATION_MAX_ACCURACY_METERS:-100}
 
     secrets:
@@ -50,8 +50,11 @@ services:
 
     environment:
       FIREBASE_CREDENTIALS: /run/secrets/firebase_credentials
+      # 127.0.0.1 inside this container is the worker, not the Mercure hub
+      # hosted by FrankenPHP in the application container.
+      MERCURE_URL: http://aldahim_app/.well-known/mercure
       DRIVER_NOTIFICATION_RADIUS_METERS: ${DRIVER_NOTIFICATION_RADIUS_METERS:-1000}
-      DRIVER_PRESENCE_TTL_SECONDS: ${DRIVER_PRESENCE_TTL_SECONDS:-120}
+      DRIVER_PRESENCE_TTL_SECONDS: ${DRIVER_PRESENCE_TTL_SECONDS:-180}
       DRIVER_LOCATION_MAX_ACCURACY_METERS: ${DRIVER_LOCATION_MAX_ACCURACY_METERS:-100}
 
     secrets:

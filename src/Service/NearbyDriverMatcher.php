@@ -13,7 +13,7 @@ final readonly class NearbyDriverMatcher
     public function __construct(
         private Connection $db,
         private LoggerInterface $logger,
-        private int $presenceTtlSeconds = 120,
+        private int $presenceTtlSeconds = 180,
         private int $maxLocationAccuracyMeters = 100,
     ) {
     }
