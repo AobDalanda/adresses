@@ -107,6 +107,19 @@ final readonly class NearbyDriverMatcher
                         WHERE ua.user_id = account.id
                           AND ua.is_primary = TRUE
                           AND driver_address.country_code = :pickupCountry
+                    ) OR (
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM user_address primary_address
+                            WHERE primary_address.user_id = account.id
+                              AND primary_address.is_primary = TRUE
+                        )
+                        AND latest_location.position IS NOT NULL
+                        AND ST_DWithin(
+                            latest_location.position,
+                            ST_SetSRID(ST_MakePoint(:pickupLongitude, :pickupLatitude), 4326)::geography,
+                            :radiusMeters
+                        )
                     )) AS country_compatible,
                     profile.validation_status = 'approved' AND provider_auth.id IS NOT NULL AS account_validated
                 FROM user_account account
@@ -133,6 +146,7 @@ final readonly class NearbyDriverMatcher
                 'pickupLatitude' => $pickupLatitude,
                 'pickupCountry' => $pickupCountryCode === null ? null : strtoupper($pickupCountryCode),
                 'vehicleType' => strtoupper($vehicleType),
+                'radiusMeters' => $radiusMeters,
             ],
         );
 
