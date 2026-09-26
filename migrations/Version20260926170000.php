@@ -43,9 +43,9 @@ final class Version20260926170000 extends AbstractMigration
         $this->addSql('CREATE INDEX idx_delivery_matching_delivery ON delivery_matching_diagnostic (delivery_id, eligible, distance_meters)');
         $this->addSql(<<<'SQL'
             UPDATE user_account
-            SET phone = '+33781191499'
+            SET phone = '33781191499'
             WHERE regexp_replace(phone, '[^0-9]', '', 'g') IN ('33781191499', '0781191499', '781191499')
-              AND NOT EXISTS (SELECT 1 FROM user_account existing WHERE existing.phone = '+33781191499')
+              AND NOT EXISTS (SELECT 1 FROM user_account existing WHERE existing.phone = '33781191499')
             SQL);
     }
 
