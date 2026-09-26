@@ -15,16 +15,17 @@ final readonly class DriverAvailabilityService
     ) {
     }
 
-    /** @return array{online: bool, effectiveOnline: bool, changedAt: ?string, lastHeartbeatAt: ?string} */
+    /** @return array{requestedOnline: bool, online: bool, effectiveOnline: bool, availabilityVersion: int, changedAt: ?string, lastLocationAt: ?string} */
     public function get(int $driverId): array
     {
         $row = $this->db->fetchAssociative(
             <<<'SQL'
                 SELECT
-                    availability.is_online,
+                    availability.requested_online,
+                    availability.availability_version,
                     availability.changed_at,
-                    availability.last_heartbeat_at,
-                    availability.is_online = TRUE
+                    latest.recorded_at AS last_location_at,
+                    availability.requested_online = TRUE
                         AND profile.validation_status = 'approved'
                         AND profile.can_deliver = TRUE
                         AND authorization.id IS NOT NULL
@@ -53,60 +54,90 @@ final readonly class DriverAvailabilityService
         );
 
         if ($row === false) {
-            return ['online' => false, 'effectiveOnline' => false, 'changedAt' => null, 'lastHeartbeatAt' => null];
+            return [
+                'requestedOnline' => false,
+                'online' => false,
+                'effectiveOnline' => false,
+                'availabilityVersion' => 0,
+                'changedAt' => null,
+                'lastLocationAt' => null,
+            ];
         }
 
+        $requestedOnline = $this->toBool($row['requested_online']);
+
         return [
-            'online' => $this->toBool($row['is_online']),
+            'requestedOnline' => $requestedOnline,
+            // Kept as a compatibility alias for existing mobile clients.
+            'online' => $requestedOnline,
             'effectiveOnline' => $this->toBool($row['effective_online']),
+            'availabilityVersion' => (int) $row['availability_version'],
             'changedAt' => $this->formatDate($row['changed_at']),
-            'lastHeartbeatAt' => $this->formatDate($row['last_heartbeat_at']),
+            'lastLocationAt' => $this->formatDate($row['last_location_at']),
         ];
     }
 
-    /** @return array{online: bool, effectiveOnline: bool, changedAt: ?string, lastHeartbeatAt: ?string} */
-    public function set(int $driverId, bool $online): array
+    /** @return array{requestedOnline: bool, online: bool, effectiveOnline: bool, availabilityVersion: int, changedAt: ?string, lastLocationAt: ?string} */
+    public function set(int $driverId, bool $online, int $availabilityVersion): array
     {
+        if ($availabilityVersion < 0) {
+            throw new \InvalidArgumentException('availabilityVersion must be a non-negative integer.');
+        }
+
+        $current = $this->db->fetchAssociative(
+            'SELECT requested_online, availability_version FROM driver_availability WHERE driver_id = :driverId',
+            ['driverId' => $driverId],
+        );
+        if ($current !== false) {
+            $currentVersion = (int) $current['availability_version'];
+            $currentOnline = $this->toBool($current['requested_online']);
+            if (
+                $availabilityVersion < $currentVersion
+                || ($availabilityVersion === $currentVersion && (!$currentOnline || $online))
+            ) {
+                return $this->get($driverId);
+            }
+        }
+
         if ($online && !$this->isEligibleDriver($driverId)) {
             throw new \DomainException('Le prestataire ne peut pas passer en ligne.');
         }
 
         $this->db->executeStatement(
             <<<'SQL'
-                INSERT INTO driver_availability (driver_id, is_online, changed_at, last_heartbeat_at)
-                VALUES (:driverId, :online, now(), NULL)
+                INSERT INTO driver_availability (driver_id, requested_online, availability_version, changed_at)
+                VALUES (:driverId, :online, :availabilityVersion, now())
                 ON CONFLICT (driver_id) DO UPDATE
-                SET is_online = EXCLUDED.is_online,
+                SET requested_online = EXCLUDED.requested_online,
+                    availability_version = EXCLUDED.availability_version,
                     changed_at = CASE
-                        WHEN driver_availability.is_online IS DISTINCT FROM EXCLUDED.is_online THEN now()
+                        WHEN driver_availability.requested_online IS DISTINCT FROM EXCLUDED.requested_online
+                            THEN now()
                         ELSE driver_availability.changed_at
-                    END,
-                    last_heartbeat_at = CASE
-                        WHEN EXCLUDED.is_online = FALSE THEN NULL
-                        ELSE driver_availability.last_heartbeat_at
                     END
+                WHERE EXCLUDED.availability_version > driver_availability.availability_version
+                   OR (
+                       EXCLUDED.availability_version = driver_availability.availability_version
+                       AND EXCLUDED.requested_online = FALSE
+                       AND driver_availability.requested_online = TRUE
+                   )
                 SQL,
-            ['driverId' => $driverId, 'online' => $online ? 'true' : 'false'],
+            [
+                'driverId' => $driverId,
+                'online' => $online ? 'true' : 'false',
+                'availabilityVersion' => $availabilityVersion,
+            ],
         );
-
-        if ($online) {
-            $this->activateHeartbeatFromRecentLocation($driverId);
-        }
 
         return $this->get($driverId);
     }
 
-    public function heartbeat(int $driverId): void
+    public function isRequestedOnline(int $driverId): bool
     {
-        $this->db->executeStatement(
-            <<<'SQL'
-                UPDATE driver_availability
-                SET last_heartbeat_at = now()
-                WHERE driver_id = :driverId
-                  AND is_online = TRUE
-                SQL,
+        return $this->toBool($this->db->fetchOne(
+            'SELECT requested_online FROM driver_availability WHERE driver_id = :driverId',
             ['driverId' => $driverId],
-        );
+        ));
     }
 
     private function isEligibleDriver(int $driverId): bool
@@ -126,36 +157,6 @@ final readonly class DriverAvailabilityService
                 SQL,
             ['driverId' => $driverId],
         ));
-    }
-
-    private function activateHeartbeatFromRecentLocation(int $driverId): void
-    {
-        $this->db->executeStatement(
-            <<<'SQL'
-                UPDATE driver_availability availability
-                SET last_heartbeat_at = now()
-                WHERE availability.driver_id = :driverId
-                  AND EXISTS (
-                      SELECT 1
-                      FROM LATERAL (
-                          SELECT recorded_at, accuracy, is_mocked, is_suspect
-                          FROM driver_location
-                          WHERE driver_id = :driverId
-                          ORDER BY created_at DESC, id DESC
-                          LIMIT 1
-                      ) latest
-                      WHERE latest.recorded_at >= now() - (:presenceTtl * INTERVAL '1 second')
-                        AND latest.accuracy <= :maxAccuracy
-                        AND latest.is_mocked = FALSE
-                        AND latest.is_suspect = FALSE
-                  )
-                SQL,
-            [
-                'driverId' => $driverId,
-                'presenceTtl' => $this->presenceTtlSeconds,
-                'maxAccuracy' => $this->maxLocationAccuracyMeters,
-            ],
-        );
     }
 
     private function toBool(mixed $value): bool

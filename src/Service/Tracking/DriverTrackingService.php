@@ -37,13 +37,6 @@ final readonly class DriverTrackingService
 
         $lastLocation = $this->locations->findLastForDriver($input->driverId);
         if ($this->isDuplicate($input, $lastLocation)) {
-            if (
-                !$input->isMocked
-                && $input->accuracy <= self::MAX_ACCEPTED_ACCURACY_METERS
-                && !$lastLocation->isSuspect()
-            ) {
-                $this->availability->heartbeat($input->driverId);
-            }
             $this->trackingLogger->info('GPS location deduplicated', ['driverId' => $input->driverId]);
 
             return DriverLocationOutput::fromEntity($lastLocation);
@@ -89,9 +82,8 @@ final readonly class DriverTrackingService
             'isSuspect' => $location->isSuspect(),
             'deliveryEvents' => $deliveryEvents,
         ]);
-        $this->publisher->publish($location);
-        if (!$location->isMocked() && !$location->isSuspect() && $location->getAccuracy() <= self::MAX_ACCEPTED_ACCURACY_METERS) {
-            $this->availability->heartbeat($input->driverId);
+        if ($this->availability->isRequestedOnline($input->driverId)) {
+            $this->publisher->publish($location);
         }
 
         return DriverLocationOutput::fromEntity($location);

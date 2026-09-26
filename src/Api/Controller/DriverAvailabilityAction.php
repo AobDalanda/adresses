@@ -36,12 +36,23 @@ final readonly class DriverAvailabilityAction
         if (!array_key_exists('online', $payload) || !is_bool($payload['online'])) {
             return new JsonResponse(['message' => 'online must be a boolean'], 400);
         }
+        if (
+            !array_key_exists('availabilityVersion', $payload)
+            || !is_int($payload['availabilityVersion'])
+            || $payload['availabilityVersion'] < 0
+        ) {
+            return new JsonResponse(['message' => 'availabilityVersion must be a non-negative integer'], 400);
+        }
         if ($payload['online'] && !$identity->isDriver()) {
             return new JsonResponse(['message' => 'Forbidden'], 403);
         }
 
         try {
-            $state = $this->availability->set($identity->userId, $payload['online']);
+            $state = $this->availability->set(
+                $identity->userId,
+                $payload['online'],
+                $payload['availabilityVersion'],
+            );
         } catch (\DomainException $exception) {
             return new JsonResponse(['message' => $exception->getMessage()], 422);
         }

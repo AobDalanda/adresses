@@ -29,9 +29,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [online]
+              required: [online, availabilityVersion]
               properties:
                 online: { type: boolean }
+                availabilityVersion:
+                  type: integer
+                  minimum: 0
+                  description: Compteur monotone géré par le client.
       responses:
         '200':
           description: Disponibilité mise à jour
@@ -174,6 +178,8 @@ paths:
           description: JWT absent ou invalide
         '403':
           description: Consultation interdite pour ce livreur
+        '409':
+          description: Le prestataire est hors ligne; aucun nouvel abonnement n'est ouvert
 components:
   securitySchemes:
     bearerAuth:
@@ -189,12 +195,21 @@ components:
   schemas:
     DriverAvailability:
       type: object
-      required: [online, effectiveOnline, changedAt, lastHeartbeatAt]
+      required: [requestedOnline, online, effectiveOnline, availabilityVersion, changedAt, lastLocationAt]
       properties:
-        online: { type: boolean }
-        effectiveOnline: { type: boolean }
+        requestedOnline:
+          type: boolean
+          description: Choix explicite du prestataire.
+        online:
+          type: boolean
+          deprecated: true
+          description: Alias de compatibilité de requestedOnline.
+        effectiveOnline:
+          type: boolean
+          description: Vrai uniquement si le choix est en ligne, le profil est autorisé et le GPS est récent et fiable.
+        availabilityVersion: { type: integer, minimum: 0 }
         changedAt: { type: [string, 'null'], format: date-time }
-        lastHeartbeatAt: { type: [string, 'null'], format: date-time }
+        lastLocationAt: { type: [string, 'null'], format: date-time }
     DeliveryAcceptance:
       type: object
       required: [deliveryId, driverId, status, statusLabel, statusGroup, assignedAt]

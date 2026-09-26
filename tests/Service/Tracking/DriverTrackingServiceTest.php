@@ -53,6 +53,40 @@ final class DriverTrackingServiceTest extends TestCase
         self::assertSame('fresh', $output->freshness);
     }
 
+    public function testOfflineDriverLocationIsPersistedWithoutRealtimePublication(): void
+    {
+        $repository = $this->createMock(DriverLocationRepositoryInterface::class);
+        $publisher = $this->createMock(LocationPublisherInterface::class);
+        $repository->expects(self::once())->method('save');
+        $repository->method('findLastForDriver')->willReturn(null);
+        $publisher->expects(self::never())->method('publish');
+
+        $db = $this->trackingConnection(false);
+        $service = new DriverTrackingService(
+            $repository,
+            $publisher,
+            new DeliveryTrackingService($db),
+            new DriverAvailabilityService($db),
+            $db,
+            new NullLogger(),
+        );
+
+        $output = $service->saveLocation(new DriverLocationInput(
+            15,
+            9.6412,
+            -13.5784,
+            5.3,
+            null,
+            null,
+            null,
+            'gps',
+            new \DateTimeImmutable('-10 seconds'),
+            false,
+        ));
+
+        self::assertSame(15, $output->driverId);
+    }
+
     public function testReturnsHistoryDtos(): void
     {
         $location = new DriverLocation(15, 9.6, -13.5, 4.0, 10.0, 90.0, 80, 'gps');
@@ -124,11 +158,12 @@ final class DriverTrackingServiceTest extends TestCase
         ));
     }
 
-    private function trackingConnection(): Connection
+    private function trackingConnection(bool $requestedOnline = true): Connection
     {
         $db = $this->createMock(Connection::class);
         $db->method('transactional')->willReturnCallback(static fn (callable $callback): mixed => $callback());
         $db->method('fetchAllAssociative')->willReturn([]);
+        $db->method('fetchOne')->willReturn($requestedOnline);
 
         return $db;
     }

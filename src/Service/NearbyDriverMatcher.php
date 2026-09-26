@@ -75,8 +75,8 @@ final readonly class NearbyDriverMatcher
             <<<'SQL'
                 SELECT
                     account.id AS driver_id,
-                    COALESCE(availability.is_online, FALSE) AS online,
-                    COALESCE(availability.is_online, FALSE)
+                    COALESCE(availability.requested_online, FALSE) AS online,
+                    COALESCE(availability.requested_online, FALSE)
                         AND profile.validation_status = 'approved'
                         AND provider_auth.id IS NOT NULL
                         AND latest_location.recorded_at >= now() - (:presenceTtl * INTERVAL '1 second')

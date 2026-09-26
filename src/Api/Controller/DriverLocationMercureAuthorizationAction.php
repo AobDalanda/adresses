@@ -6,6 +6,7 @@ namespace App\Api\Controller;
 
 use App\Security\DriverLocationVoter;
 use App\Security\TrackingIdentityResolver;
+use App\Service\Tracking\DriverAvailabilityService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,7 +20,8 @@ final class DriverLocationMercureAuthorizationAction extends AbstractDriverTrack
         DriverLocationVoter $voter,
         LoggerInterface $trackingLogger,
         private readonly Authorization $mercureAuthorization,
-        private readonly HubInterface $hub
+        private readonly HubInterface $hub,
+        private readonly DriverAvailabilityService $availability,
     ) {
         parent::__construct($identityResolver, $voter, $trackingLogger);
     }
@@ -34,6 +36,9 @@ final class DriverLocationMercureAuthorizationAction extends AbstractDriverTrack
         $denied = $this->authorize(DriverLocationVoter::VIEW, $identity, $id);
         if ($denied !== null) {
             return $denied;
+        }
+        if (!$this->availability->isRequestedOnline($id)) {
+            return new JsonResponse(['message' => 'Driver is offline'], 409);
         }
 
         $topic = sprintf('driver/%d/location', $id);
