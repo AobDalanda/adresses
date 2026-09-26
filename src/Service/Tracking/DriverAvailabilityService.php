@@ -78,27 +78,8 @@ final readonly class DriverAvailabilityService
     }
 
     /** @return array{requestedOnline: bool, online: bool, effectiveOnline: bool, availabilityVersion: int, changedAt: ?string, lastLocationAt: ?string} */
-    public function set(int $driverId, bool $online, int $availabilityVersion): array
+    public function set(int $driverId, bool $online): array
     {
-        if ($availabilityVersion < 0) {
-            throw new \InvalidArgumentException('availabilityVersion must be a non-negative integer.');
-        }
-
-        $current = $this->db->fetchAssociative(
-            'SELECT requested_online, availability_version FROM driver_availability WHERE driver_id = :driverId',
-            ['driverId' => $driverId],
-        );
-        if ($current !== false) {
-            $currentVersion = (int) $current['availability_version'];
-            $currentOnline = $this->toBool($current['requested_online']);
-            if (
-                $availabilityVersion < $currentVersion
-                || ($availabilityVersion === $currentVersion && (!$currentOnline || $online))
-            ) {
-                return $this->get($driverId);
-            }
-        }
-
         if ($online && !$this->isEligibleDriver($driverId)) {
             throw new \DomainException('Le prestataire ne peut pas passer en ligne.');
         }
@@ -106,26 +87,19 @@ final readonly class DriverAvailabilityService
         $this->db->executeStatement(
             <<<'SQL'
                 INSERT INTO driver_availability (driver_id, requested_online, availability_version, changed_at)
-                VALUES (:driverId, :online, :availabilityVersion, now())
+                VALUES (:driverId, :online, 1, now())
                 ON CONFLICT (driver_id) DO UPDATE
                 SET requested_online = EXCLUDED.requested_online,
-                    availability_version = EXCLUDED.availability_version,
+                    availability_version = driver_availability.availability_version + 1,
                     changed_at = CASE
                         WHEN driver_availability.requested_online IS DISTINCT FROM EXCLUDED.requested_online
                             THEN now()
                         ELSE driver_availability.changed_at
                     END
-                WHERE EXCLUDED.availability_version > driver_availability.availability_version
-                   OR (
-                       EXCLUDED.availability_version = driver_availability.availability_version
-                       AND EXCLUDED.requested_online = FALSE
-                       AND driver_availability.requested_online = TRUE
-                   )
                 SQL,
             [
                 'driverId' => $driverId,
                 'online' => $online ? 'true' : 'false',
-                'availabilityVersion' => $availabilityVersion,
             ],
         );
 

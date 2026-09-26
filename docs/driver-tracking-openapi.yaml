@@ -29,13 +29,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [online, availabilityVersion]
+              required: [online]
               properties:
                 online: { type: boolean }
                 availabilityVersion:
                   type: integer
                   minimum: 0
-                  description: Compteur monotone géré par le client.
+                  deprecated: true
+                  description: Champ temporairement toléré mais ignoré par le backend.
       responses:
         '200':
           description: Disponibilité mise à jour
@@ -44,8 +45,6 @@ paths:
               schema: { $ref: '#/components/schemas/DriverAvailability' }
         '401':
           description: JWT absent ou invalide
-        '403':
-          description: Le compte ne peut pas passer en ligne
         '422':
           description: Le profil ou l'autorisation prestataire n'est pas actif
   /deliveries/{deliveryId}/accept:

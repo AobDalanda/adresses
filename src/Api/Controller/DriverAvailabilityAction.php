@@ -30,31 +30,38 @@ final readonly class DriverAvailabilityAction
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['message' => 'Invalid JSON payload'], 400);
+            return new JsonResponse([
+                'error' => 'INVALID_PAYLOAD',
+                'message' => 'Le payload JSON est invalide.',
+            ], 400);
         }
 
         if (!array_key_exists('online', $payload) || !is_bool($payload['online'])) {
-            return new JsonResponse(['message' => 'online must be a boolean'], 400);
-        }
-        if (
-            !array_key_exists('availabilityVersion', $payload)
-            || !is_int($payload['availabilityVersion'])
-            || $payload['availabilityVersion'] < 0
-        ) {
-            return new JsonResponse(['message' => 'availabilityVersion must be a non-negative integer'], 400);
+            return new JsonResponse([
+                'error' => 'INVALID_ONLINE_VALUE',
+                'message' => 'Le champ online doit être un booléen.',
+            ], 400);
         }
         if ($payload['online'] && !$identity->isDriver()) {
-            return new JsonResponse(['message' => 'Forbidden'], 403);
+            return new JsonResponse([
+                'error' => 'PROVIDER_NOT_AUTHORIZED',
+                'message' => 'Ce compte ne peut pas activer la disponibilité prestataire.',
+            ], 422);
         }
 
         try {
-            $state = $this->availability->set(
-                $identity->userId,
-                $payload['online'],
-                $payload['availabilityVersion'],
-            );
+            // availabilityVersion is intentionally ignored during the mobile compatibility period.
+            $state = $this->availability->set($identity->userId, $payload['online']);
         } catch (\DomainException $exception) {
-            return new JsonResponse(['message' => $exception->getMessage()], 422);
+            return new JsonResponse([
+                'error' => 'PROVIDER_NOT_AUTHORIZED',
+                'message' => $exception->getMessage(),
+            ], 422);
+        } catch (\Throwable) {
+            return new JsonResponse([
+                'error' => 'AVAILABILITY_UPDATE_FAILED',
+                'message' => 'Impossible de modifier la disponibilité.',
+            ], 500);
         }
 
         return new JsonResponse($state);

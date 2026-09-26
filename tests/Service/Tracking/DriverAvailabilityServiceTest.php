@@ -33,12 +33,12 @@ final class DriverAvailabilityServiceTest extends TestCase
         $statements = [];
         $db = $this->createMock(Connection::class);
         $db->method('fetchOne')->willReturn(true);
-        $db->method('fetchAssociative')->willReturnOnConsecutiveCalls(false, [
+        $db->method('fetchAssociative')->willReturn([
             'requested_online' => true,
-            'effective_online' => true,
-            'availability_version' => 42,
+            'effective_online' => false,
+            'availability_version' => 1,
             'changed_at' => '2026-09-26 10:00:00+00',
-            'last_location_at' => '2026-09-26 10:00:00+00',
+            'last_location_at' => null,
         ]);
         $db->method('executeStatement')->willReturnCallback(
             static function (string $sql, array $params = []) use (&$statements): int {
@@ -47,32 +47,31 @@ final class DriverAvailabilityServiceTest extends TestCase
                 return 1;
             },
         );
-        $state = (new DriverAvailabilityService($db))->set(42, true, 42);
+        $state = (new DriverAvailabilityService($db))->set(42, true);
 
         self::assertTrue($state['requestedOnline']);
         self::assertTrue($state['online']);
-        self::assertTrue($state['effectiveOnline']);
-        self::assertSame(42, $state['availabilityVersion']);
+        self::assertFalse($state['effectiveOnline']);
+        self::assertSame(1, $state['availabilityVersion']);
         self::assertCount(1, $statements);
         self::assertStringContainsString('ON CONFLICT (driver_id)', $statements[0][0]);
-        self::assertStringContainsString('EXCLUDED.availability_version >', $statements[0][0]);
+        self::assertStringContainsString('availability_version + 1', $statements[0][0]);
     }
 
     public function testIneligibleDriverCannotGoOnline(): void
     {
         $db = $this->createMock(Connection::class);
-        $db->method('fetchAssociative')->willReturn(false);
         $db->method('fetchOne')->willReturn(false);
         $db->expects(self::never())->method('executeStatement');
 
         $this->expectException(\DomainException::class);
-        (new DriverAvailabilityService($db))->set(42, true, 1);
+        (new DriverAvailabilityService($db))->set(42, true);
     }
 
     public function testGoingOfflineDoesNotRequireEligibility(): void
     {
         $db = $this->createMock(Connection::class);
-        $db->method('fetchAssociative')->willReturnOnConsecutiveCalls(false, [
+        $db->method('fetchAssociative')->willReturn([
             'requested_online' => false,
             'effective_online' => false,
             'availability_version' => 7,
@@ -82,50 +81,38 @@ final class DriverAvailabilityServiceTest extends TestCase
         $db->expects(self::never())->method('fetchOne');
         $db->expects(self::once())->method('executeStatement')->willReturn(1);
 
-        self::assertFalse((new DriverAvailabilityService($db))->set(42, false, 7)['online']);
+        self::assertFalse((new DriverAvailabilityService($db))->set(42, false)['online']);
     }
 
-    public function testOlderOnlineRequestCannotUndoNewerOfflineChoice(): void
+    public function testRepeatedOfflineRequestsAreIdempotentAndServerVersioned(): void
     {
         $db = $this->createMock(Connection::class);
         $db->method('fetchAssociative')->willReturnOnConsecutiveCalls(
-            ['requested_online' => false, 'availability_version' => 42],
             [
                 'requested_online' => false,
                 'effective_online' => false,
-                'availability_version' => 42,
+                'availability_version' => 8,
+                'changed_at' => '2026-09-26 14:30:00+00',
+                'last_location_at' => '2026-09-26 14:30:05+00',
+            ],
+            [
+                'requested_online' => false,
+                'effective_online' => false,
+                'availability_version' => 9,
                 'changed_at' => '2026-09-26 14:30:00+00',
                 'last_location_at' => '2026-09-26 14:30:05+00',
             ],
         );
         $db->expects(self::never())->method('fetchOne');
-        $db->expects(self::never())->method('executeStatement');
+        $db->expects(self::exactly(2))->method('executeStatement');
 
-        $state = (new DriverAvailabilityService($db))->set(42, true, 41);
+        $service = new DriverAvailabilityService($db);
+        $first = $service->set(42, false);
+        $second = $service->set(42, false);
 
-        self::assertFalse($state['requestedOnline']);
-        self::assertFalse($state['effectiveOnline']);
-        self::assertSame(42, $state['availabilityVersion']);
-    }
-
-    public function testOfflineWinsWhenConflictingRequestsHaveTheSameVersion(): void
-    {
-        $db = $this->createMock(Connection::class);
-        $db->method('fetchAssociative')->willReturnOnConsecutiveCalls(
-            ['requested_online' => true, 'availability_version' => 42],
-            [
-                'requested_online' => false,
-                'effective_online' => false,
-                'availability_version' => 42,
-                'changed_at' => '2026-09-26 14:30:00+00',
-                'last_location_at' => null,
-            ],
-        );
-        $db->expects(self::never())->method('fetchOne');
-        $db->expects(self::once())->method('executeStatement');
-
-        $state = (new DriverAvailabilityService($db))->set(42, false, 42);
-
-        self::assertFalse($state['requestedOnline']);
+        self::assertFalse($first['requestedOnline']);
+        self::assertFalse($second['requestedOnline']);
+        self::assertSame(8, $first['availabilityVersion']);
+        self::assertSame(9, $second['availabilityVersion']);
     }
 }

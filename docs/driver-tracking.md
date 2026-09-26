@@ -129,11 +129,11 @@ PUT /api/v1/drivers/me/availability
 Authorization: Bearer <JWT>
 Content-Type: application/json
 
-{"online": true, "availabilityVersion": 42}
+{"online": true}
 ```
 
 La réponse contient `requestedOnline`, le choix explicite du livreur, et `effectiveOnline`, qui n'est vrai que si ce choix est actif, si le profil est autorisé et si une position GPS fiable a été reçue depuis moins de deux minutes. `online` reste temporairement présent comme alias de compatibilité de `requestedOnline`.
 
-`availabilityVersion` est un compteur monotone géré par le mobile. Une requête plus ancienne que la version enregistrée est ignorée. À version égale, une mise hors ligne est prioritaire et ne peut pas être annulée par une requête `online: true` arrivée en retard. Répéter une mise hors ligne est idempotent.
+Pendant la période de compatibilité mobile, `availabilityVersion` est facultatif et ignoré lorsqu'il est envoyé. Le backend incrémente lui-même la version retournée à chaque écriture. Le contrôle optimiste fondé sur une version reçue sera activé ultérieurement, après coordination avec toutes les versions mobiles déployées.
 
 La publication d'une position ne modifie jamais la disponibilité. Lorsque `requestedOnline` vaut `false`, la position est conservée à titre technique mais elle n'est pas publiée sur le canal temps réel et le prestataire est exclu des nouvelles attributions.
