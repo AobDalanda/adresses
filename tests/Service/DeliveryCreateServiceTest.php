@@ -12,6 +12,7 @@ use App\Entity\UserSubscription;
 use App\Enum\SubscriptionPlanCode;
 use App\Enum\UserSubscriptionStatus;
 use App\Service\DeliveryCreateService;
+use App\Service\DeliveryGeographyPolicyInterface;
 use App\Service\DeliveryOrderNotificationPublisherInterface;
 use App\Service\Pricing\PricingEngine;
 use App\Service\Subscription\PlanLimitChecker;
@@ -30,6 +31,7 @@ final class DeliveryCreateServiceTest extends TestCase
         $usageCounters = $this->createMock(UsageCounterManager::class);
         $pricing = $this->createMock(PricingEngine::class);
         $notificationPublisher = $this->createMock(DeliveryOrderNotificationPublisherInterface::class);
+        $geographyPolicy = $this->createMock(DeliveryGeographyPolicyInterface::class);
 
         $user = (new UserAccount())->setPhone('+224620000001');
         $subscription = $this->activeSubscription($user);
@@ -44,6 +46,9 @@ final class DeliveryCreateServiceTest extends TestCase
             ->method('publishNewDeliveryOrder')
             ->with(self::callback(static fn (array $delivery): bool => $delivery['status'] === 'QUOTED'))
             ->willReturn(true);
+        $geographyPolicy->expects(self::once())
+            ->method('assertDeliveryAllowed')
+            ->with('GN', 'GN');
 
         $pricing->expects(self::once())
             ->method('calculate')
@@ -77,6 +82,7 @@ final class DeliveryCreateServiceTest extends TestCase
                         return [
                             'address_id' => 12,
                             'address_name' => 'Maison',
+                            'country_code' => 'GN',
                             'latitude' => 9.6412,
                             'longitude' => -13.5784,
                             'zone_admin_area_id' => null,
@@ -87,6 +93,7 @@ final class DeliveryCreateServiceTest extends TestCase
                     return [
                         'address_id' => 45,
                         'address_name' => 'Bureau',
+                        'country_code' => 'GN',
                         'latitude' => 9.69,
                         'longitude' => -13.52,
                         'zone_admin_area_id' => null,
@@ -161,7 +168,8 @@ final class DeliveryCreateServiceTest extends TestCase
             $subscriptions,
             $planLimits,
             $usageCounters,
-            $notificationPublisher
+            $notificationPublisher,
+            $geographyPolicy,
         )->create(42, [
             'pickup' => ['type' => 'address', 'id' => 12],
             'dropoff' => ['type' => 'address', 'id' => 45],
@@ -430,6 +438,7 @@ final class DeliveryCreateServiceTest extends TestCase
         PlanLimitChecker $planLimits,
         UsageCounterManager $usageCounters,
         ?DeliveryOrderNotificationPublisherInterface $notificationPublisher = null,
+        ?DeliveryGeographyPolicyInterface $geographyPolicy = null,
     ): DeliveryCreateService {
         return new DeliveryCreateService(
             $db,
@@ -437,7 +446,8 @@ final class DeliveryCreateServiceTest extends TestCase
             $subscriptions,
             $planLimits,
             $usageCounters,
-            $notificationPublisher ?? $this->createMock(DeliveryOrderNotificationPublisherInterface::class)
+            $notificationPublisher ?? $this->createMock(DeliveryOrderNotificationPublisherInterface::class),
+            $geographyPolicy ?? $this->createMock(DeliveryGeographyPolicyInterface::class),
         );
     }
 

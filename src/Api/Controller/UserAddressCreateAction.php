@@ -76,6 +76,13 @@ final class UserAddressCreateAction
             return new JsonResponse(['message' => 'contactPhone doit être une chaîne'], 400);
         }
 
+        $countryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+            ? strtoupper(trim($payload['countryCode']))
+            : null;
+        if ($countryCode !== null && preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+            return new JsonResponse(['message' => 'countryCode doit être un code ISO 3166-1 alpha-2'], 400);
+        }
+
         $phone = (string) ($auth['sub'] ?? '');
         if ($phone === '') {
             return new JsonResponse(['message' => 'Token invalide'], 401);
@@ -124,6 +131,7 @@ final class UserAddressCreateAction
                     'accuracy' => isset($payload['accuracy']) ? (float) $payload['accuracy'] : null,
                     'source' => $payload['source'] ?? null,
                     'contactPhone' => $contactPhone,
+                    'countryCode' => $countryCode,
                     'isDefault' => $payload['isDefault'] ?? true,
                 ],
                 $request->getClientIp()

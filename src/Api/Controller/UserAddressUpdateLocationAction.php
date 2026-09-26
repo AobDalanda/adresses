@@ -66,6 +66,13 @@ final class UserAddressUpdateLocationAction
             return new JsonResponse(['message' => 'reason doit etre une chaine'], 400);
         }
 
+        $countryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+            ? strtoupper(trim($payload['countryCode']))
+            : null;
+        if ($countryCode !== null && preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+            return new JsonResponse(['message' => 'countryCode doit être un code ISO 3166-1 alpha-2'], 400);
+        }
+
         if ($label !== null && (!is_string($label) || trim($label) === '')) {
             return new JsonResponse(['message' => 'label doit etre une chaine non vide'], 400);
         }
@@ -122,6 +129,7 @@ final class UserAddressUpdateLocationAction
                     'accuracy' => isset($payload['accuracy']) ? (float) $payload['accuracy'] : null,
                     'source' => $payload['source'] ?? null,
                     'reason' => $payload['reason'] ?? null,
+                    'countryCode' => $countryCode,
                 ],
                 $request->getClientIp()
             );

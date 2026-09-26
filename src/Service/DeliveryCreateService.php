@@ -26,6 +26,7 @@ final class DeliveryCreateService
         private readonly PlanLimitChecker $planLimits,
         private readonly UsageCounterManager $usageCounters,
         private readonly DeliveryOrderNotificationPublisherInterface $notificationPublisher,
+        private readonly DeliveryGeographyPolicyInterface $geographyPolicy,
     ) {
     }
 
@@ -69,6 +70,10 @@ final class DeliveryCreateService
         $dropoff = $this->resolveAddressReference($payload['dropoff'], 'destination');
         $this->assertAddressHasCoordinates($pickup, 'départ');
         $this->assertAddressHasCoordinates($dropoff, 'destination');
+        $this->geographyPolicy->assertDeliveryAllowed(
+            is_string($pickup['country_code'] ?? null) ? $pickup['country_code'] : null,
+            is_string($dropoff['country_code'] ?? null) ? $dropoff['country_code'] : null,
+        );
         $this->assertServiceTypeExists($payload['serviceType']);
         $this->assertVehicleTypeExists($payload['vehicleType']);
 
@@ -400,6 +405,7 @@ final class DeliveryCreateService
                 SELECT
                     a.id AS address_id,
                     a.display_label AS address_name,
+                    a.country_code,
                     ST_Y(gwl.final_geom::geometry) AS latitude,
                     ST_X(gwl.final_geom::geometry) AS longitude,
                     gaa.id AS zone_admin_area_id,
@@ -430,6 +436,7 @@ final class DeliveryCreateService
                 SELECT
                     a.id AS address_id,
                     a.display_label AS address_name,
+                    a.country_code,
                     ST_Y(gwl.final_geom::geometry) AS latitude,
                     ST_X(gwl.final_geom::geometry) AS longitude,
                     gaa.id AS zone_admin_area_id,

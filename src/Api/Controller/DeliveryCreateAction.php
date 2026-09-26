@@ -3,6 +3,7 @@
 namespace App\Api\Controller;
 
 use App\Exception\SubscriptionLimitReachedException;
+use App\Exception\DeliveryGeographyException;
 use App\Service\DeliveryCreateService;
 use App\Service\JwtAuthService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -63,6 +64,12 @@ final class DeliveryCreateAction
             ], 402);
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 400);
+        } catch (DeliveryGeographyException $e) {
+            return new JsonResponse([
+                'code' => $e->getErrorCode(),
+                'message' => $e->getMessage(),
+                'allowedCountryCodes' => $e->getAllowedCountryCodes(),
+            ], 409);
         } catch (\DomainException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 409);
         } catch (\RuntimeException $e) {

@@ -140,7 +140,13 @@ class AddressController extends AbstractController
         }
 
         try {
-            $result = $this->createAddress->create($phone, $normalizedPoints, $request->getClientIp());
+            $countryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+                ? strtoupper(trim($payload['countryCode']))
+                : null;
+            if ($countryCode !== null && preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+                return $this->json(['message' => 'countryCode doit être un code ISO 3166-1 alpha-2'], 400);
+            }
+            $result = $this->createAddress->create($phone, $normalizedPoints, $request->getClientIp(), $countryCode);
         } catch (\InvalidArgumentException $e) {
             return $this->json(['message' => $e->getMessage()], 400);
         } catch (\Throwable $e) {

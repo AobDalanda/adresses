@@ -85,6 +85,9 @@ services:
     App\Service\DeliveryOrderNotificationPublisherInterface:
         alias: App\Service\DeliveryOrderNotificationPublisher
 
+    App\Service\DeliveryGeographyPolicyInterface:
+        alias: App\Service\DeliveryGeographyPolicyService
+
     App\Service\DeliveryOrderNotificationPublisher:
         arguments:
             $maxDistanceMeters: '%driver_notification_radius_meters%'

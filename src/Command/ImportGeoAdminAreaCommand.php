@@ -31,6 +31,8 @@ final class ImportGeoAdminAreaCommand extends Command
             ->addOption('type-field', null, InputOption::VALUE_REQUIRED, 'Champ propriété pour le type', 'type')
             ->addOption('id-field', null, InputOption::VALUE_REQUIRED, 'Champ propriété pour l’identifiant source', 'id')
             ->addOption('parent-field', null, InputOption::VALUE_REQUIRED, 'Champ propriété pour l’identifiant parent', 'parent_id')
+            ->addOption('country-field', null, InputOption::VALUE_REQUIRED, 'Champ propriété pour le code pays ISO', 'country_code')
+            ->addOption('default-country', null, InputOption::VALUE_REQUIRED, 'Code pays ISO par défaut', 'GN')
             ->addOption('default-type', null, InputOption::VALUE_REQUIRED, 'Type par défaut si absent', 'unknown');
     }
 
@@ -44,7 +46,15 @@ final class ImportGeoAdminAreaCommand extends Command
         $typeField = (string) $input->getOption('type-field');
         $idField = (string) $input->getOption('id-field');
         $parentField = (string) $input->getOption('parent-field');
+        $countryField = (string) $input->getOption('country-field');
+        $defaultCountry = strtoupper(trim((string) $input->getOption('default-country')));
         $defaultType = trim((string) $input->getOption('default-type'));
+
+        if (preg_match('/^[A-Z]{2}$/D', $defaultCountry) !== 1) {
+            $io->error('default-country doit être un code ISO 3166-1 alpha-2.');
+
+            return Command::FAILURE;
+        }
 
         if (!is_file($file) || !is_readable($file)) {
             $io->error(sprintf('Fichier introuvable ou illisible: %s', $file));
@@ -99,6 +109,12 @@ final class ImportGeoAdminAreaCommand extends Command
                 if ($type === '') {
                     $type = 'unknown';
                 }
+                $countryCode = strtoupper(trim((string) ($properties[$countryField] ?? $defaultCountry)));
+                if (preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+                    $skipped++;
+                    $io->warning(sprintf('Feature #%d ignorée: code pays invalide.', $index));
+                    continue;
+                }
 
                 $geometryJson = null;
                 if (is_array($geometry)) {
@@ -107,7 +123,7 @@ final class ImportGeoAdminAreaCommand extends Command
 
                 $dbId = (int) $this->db->fetchOne(
                     '
-                    INSERT INTO geo_admin_area (name, type, parent_id, boundary)
+                    INSERT INTO geo_admin_area (name, type, parent_id, boundary, country_code)
                     VALUES (
                         :name,
                         :type,
@@ -115,7 +131,8 @@ final class ImportGeoAdminAreaCommand extends Command
                         CASE
                             WHEN :geometry IS NULL THEN NULL
                             ELSE ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(:geometry), 4326))::geography
-                        END
+                        END,
+                        :countryCode
                     )
                     RETURNING id
                     ',
@@ -123,6 +140,7 @@ final class ImportGeoAdminAreaCommand extends Command
                         'name' => $name,
                         'type' => $type,
                         'geometry' => $geometryJson,
+                        'countryCode' => $countryCode,
                     ]
                 );
 

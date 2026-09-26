@@ -26,7 +26,8 @@ final class UpdateConnectedUserAddressService
      *     plus_code?: ?string,
      *     accuracy?: ?float,
      *     source?: ?string,
-     *     reason?: ?string
+     *     reason?: ?string,
+     *     countryCode?: ?string
      * } $payload
      * @return array{
      *     addressId: int,
@@ -60,6 +61,9 @@ final class UpdateConnectedUserAddressService
         $reason = isset($payload['reason']) && is_string($payload['reason']) && trim($payload['reason']) !== ''
             ? trim($payload['reason'])
             : 'Mise à jour de la localisation';
+        $providedCountryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+            ? strtoupper(trim($payload['countryCode']))
+            : null;
 
         $this->db->beginTransaction();
 
@@ -182,7 +186,7 @@ final class UpdateConnectedUserAddressService
 
             $adminArea = $this->db->fetchAssociative(
                 "
-                SELECT id, name
+                SELECT id, name, country_code
                 FROM geo_admin_area
                 WHERE boundary IS NOT NULL
                   AND ST_Contains(
@@ -196,6 +200,15 @@ final class UpdateConnectedUserAddressService
                     'lng' => $longitude,
                 ]
             ) ?: null;
+
+            $countryCode = $adminArea !== null
+                ? strtoupper((string) $adminArea['country_code'])
+                : $providedCountryCode;
+            if ($countryCode === null || preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+                throw new \InvalidArgumentException(
+                    'countryCode est requis lorsque la position ne correspond à aucune zone administrative connue'
+                );
+            }
 
             $resolvedPlusCode = $this->resolvePlusCode($providedPlusCode, $latitude, $longitude);
             $plusCodeId = (int) $this->db->fetchOne(
@@ -251,7 +264,8 @@ final class UpdateConnectedUserAddressService
                     geo_cell_id = :geoCellId,
                     plus_code_id = :plusCodeId,
                     weighted_location_id = :weightedLocationId,
-                    admin_area_id = :adminAreaId
+                    admin_area_id = :adminAreaId,
+                    country_code = :countryCode
                 WHERE id = :addressId
                 ",
                 [
@@ -261,6 +275,7 @@ final class UpdateConnectedUserAddressService
                     'plusCodeId' => $plusCodeId,
                     'weightedLocationId' => $weightedLocationId,
                     'adminAreaId' => $adminArea['id'] ?? null,
+                    'countryCode' => $countryCode,
                     'addressId' => $addressId,
                 ]
             );
@@ -309,6 +324,7 @@ final class UpdateConnectedUserAddressService
                 'plusCode' => $resolvedPlusCode,
                 'latitude' => $latitude,
                 'longitude' => $longitude,
+                'countryCode' => $countryCode,
                 'adminArea' => $adminArea !== null ? [
                     'id' => (int) $adminArea['id'],
                     'name' => (string) $adminArea['name'],
@@ -413,7 +429,7 @@ final class UpdateConnectedUserAddressService
         $y = (int) floor($meters['y'] / $cellSizeMeters);
 
         return sprintf(
-            'GN-3M-%s_%s',
+            'GEO-3M-%s_%s',
             $this->encodeSignedInt($x),
             $this->encodeSignedInt($y)
         );

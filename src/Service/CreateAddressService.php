@@ -14,9 +14,9 @@ final class CreateAddressService
 
     /**
      * @param array<int, array{lat: float, lng: float, accuracy?: float, source?: string}> $gpsPoints
-     * @return array{addressId: int, identifier: string, displayLabel: string, adminArea: array{id: int, name: string}, geoCellCode: string}
+     * @return array{addressId: int, identifier: string, displayLabel: string, countryCode: string, adminArea: array{id: int, name: string}|null, geoCellCode: string}
      */
-    public function create(string $phone, array $gpsPoints, ?string $clientIp = null): array
+    public function create(string $phone, array $gpsPoints, ?string $clientIp = null, ?string $providedCountryCode = null): array
     {
         if ($gpsPoints === []) {
             throw new \InvalidArgumentException('gpsPoints must not be empty.');
@@ -121,7 +121,7 @@ final class CreateAddressService
 
             $admin = $this->db->fetchAssociative(
                 "
-                SELECT id, name
+                SELECT id, name, country_code
                 FROM geo_admin_area
                 WHERE ST_Contains(
                     boundary,
@@ -135,20 +135,25 @@ final class CreateAddressService
                 ]
             );
 
-            if (!$admin) {
-                throw new \RuntimeException('No administrative area found for this location.');
+            $countryCode = $admin !== false
+                ? strtoupper((string) $admin['country_code'])
+                : ($providedCountryCode !== null ? strtoupper(trim($providedCountryCode)) : null);
+            if ($countryCode === null || preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+                throw new \InvalidArgumentException(
+                    'countryCode est requis lorsque la position ne correspond à aucune zone administrative connue'
+                );
             }
 
-            $addressCode = $this->buildAddressCode((int) $admin['id'], $cellCode);
-            $displayLabel = $this->buildDisplayLabel($phone, (string) $admin['name']);
+            $addressCode = $this->buildAddressCode($admin !== false ? (int) $admin['id'] : null, $cellCode);
+            $displayLabel = $this->buildDisplayLabel($phone, $admin !== false ? (string) $admin['name'] : $countryCode);
 
             $addressId = (int) $this->db->fetchOne(
                 "
                 INSERT INTO address
                     (address_code, display_label, phone_display, geo_cell_id,
-                     weighted_location_id, admin_area_id)
+                     weighted_location_id, admin_area_id, country_code)
                 VALUES
-                    (:code, :label, :phone, :cell, :weighted, :admin)
+                    (:code, :label, :phone, :cell, :weighted, :admin, :countryCode)
                 RETURNING id
                 ",
                 [
@@ -157,7 +162,8 @@ final class CreateAddressService
                     'phone' => $phone,
                     'cell' => $cellId,
                     'weighted' => $weightedId,
-                    'admin' => $admin['id'],
+                    'admin' => $admin !== false ? $admin['id'] : null,
+                    'countryCode' => $countryCode,
                 ]
             );
 
@@ -181,10 +187,11 @@ final class CreateAddressService
                 'addressId' => $addressId,
                 'identifier' => AddressQrCodec::encode($addressId),
                 'displayLabel' => $displayLabel,
-                'adminArea' => [
+                'countryCode' => $countryCode,
+                'adminArea' => $admin !== false ? [
                     'id' => (int) $admin['id'],
                     'name' => (string) $admin['name'],
-                ],
+                ] : null,
                 'geoCellCode' => $cellCode,
             ];
         } catch (\Throwable $e) {
@@ -245,15 +252,15 @@ final class CreateAddressService
         $y = (int) floor($meters['y'] / $cellSizeMeters);
 
         return sprintf(
-            'GN-3M-%s_%s',
+            'GEO-3M-%s_%s',
             $this->encodeSignedInt($x),
             $this->encodeSignedInt($y)
         );
     }
 
-    private function buildAddressCode(int $adminId, string $cellCode): string
+    private function buildAddressCode(?int $adminId, string $cellCode): string
     {
-        return sprintf('ADM%d-%s', $adminId, $cellCode);
+        return $adminId !== null ? sprintf('ADM%d-%s', $adminId, $cellCode) : $cellCode;
     }
 
     private function buildDisplayLabel(string $phone, string $adminName): string

@@ -30,6 +30,9 @@ class Address
     #[ORM\Column(nullable: true)]
     public ?string $contactPhone;
 
+    #[ORM\Column(length: 2, options: ['default' => 'GN'])]
+    public string $countryCode = 'GN';
+
     #[ORM\Column(type: 'datetime')]
     public \DateTimeInterface $createdAt;
 }

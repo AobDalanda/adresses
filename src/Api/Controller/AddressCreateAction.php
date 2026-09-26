@@ -34,6 +34,13 @@ final class AddressCreateAction
             return new JsonResponse(['message' => 'gpsPoints est requis'], 400);
         }
 
+        $countryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+            ? strtoupper(trim($payload['countryCode']))
+            : null;
+        if ($countryCode !== null && preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+            return new JsonResponse(['message' => 'countryCode doit être un code ISO 3166-1 alpha-2'], 400);
+        }
+
         $normalizedPoints = [];
         foreach ($gpsPoints as $p) {
             if (!is_array($p)) {
@@ -81,7 +88,7 @@ final class AddressCreateAction
         }
 
         try {
-            $result = $this->createAddress->create($phone, $normalizedPoints, $request->getClientIp());
+            $result = $this->createAddress->create($phone, $normalizedPoints, $request->getClientIp(), $countryCode);
         } catch (\InvalidArgumentException $e) {
             return new JsonResponse(['message' => $e->getMessage()], 400);
         } catch (\Throwable) {

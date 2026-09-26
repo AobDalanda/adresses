@@ -28,6 +28,7 @@ final class CreateConnectedUserAddressService
      *     accuracy?: ?float,
      *     source?: ?string,
      *     contactPhone?: ?string,
+     *     countryCode?: ?string,
      *     isDefault?: ?bool
      * } $payload
      * @return array{
@@ -37,6 +38,7 @@ final class CreateConnectedUserAddressService
      *     displayLabel: string,
      *     contactPhone: string,
      *     plusCode: string,
+     *     countryCode: string,
      *     adminArea: array{id: int, name: string}|null,
      *     verified: bool,
      *     verificationStatus: string,
@@ -59,6 +61,9 @@ final class CreateConnectedUserAddressService
             ? trim($payload['contactPhone'])
             : $phone;
         $isDefault = (bool) ($payload['isDefault'] ?? true);
+        $providedCountryCode = isset($payload['countryCode']) && is_string($payload['countryCode'])
+            ? strtoupper(trim($payload['countryCode']))
+            : null;
 
         $this->db->beginTransaction();
 
@@ -135,7 +140,7 @@ final class CreateConnectedUserAddressService
 
             $adminArea = $this->db->fetchAssociative(
                 "
-                SELECT id, name
+                SELECT id, name, country_code
                 FROM geo_admin_area
                 WHERE boundary IS NOT NULL
                   AND ST_Contains(
@@ -149,6 +154,15 @@ final class CreateConnectedUserAddressService
                     'lng' => $longitude,
                 ]
             ) ?: null;
+
+            $countryCode = $adminArea !== null
+                ? strtoupper((string) $adminArea['country_code'])
+                : $providedCountryCode;
+            if ($countryCode === null || preg_match('/^[A-Z]{2}$/D', $countryCode) !== 1) {
+                throw new \InvalidArgumentException(
+                    'countryCode est requis lorsque la position ne correspond à aucune zone administrative connue'
+                );
+            }
 
             $resolvedPlusCode = $this->resolvePlusCode($providedPlusCode, $latitude, $longitude);
             $plusCodeId = (int) $this->db->fetchOne(
@@ -206,6 +220,7 @@ final class CreateConnectedUserAddressService
                     plus_code_id,
                     weighted_location_id,
                     admin_area_id,
+                    country_code,
                     display_label
                 )
                 VALUES (
@@ -216,6 +231,7 @@ final class CreateConnectedUserAddressService
                     :plusCodeId,
                     :weightedLocationId,
                     :adminAreaId,
+                    :countryCode,
                     :displayLabel
                 )
                 ON CONFLICT (phone_display, geo_cell_id) DO UPDATE
@@ -223,6 +239,7 @@ final class CreateConnectedUserAddressService
                         contact_phone = EXCLUDED.contact_phone,
                         weighted_location_id = EXCLUDED.weighted_location_id,
                         admin_area_id = EXCLUDED.admin_area_id,
+                        country_code = EXCLUDED.country_code,
                         display_label = EXCLUDED.display_label
                 RETURNING id, address_code, display_label, contact_phone
                 ",
@@ -234,6 +251,7 @@ final class CreateConnectedUserAddressService
                     'plusCodeId' => $plusCodeId,
                     'weightedLocationId' => $weightedLocationId,
                     'adminAreaId' => $adminArea['id'] ?? null,
+                    'countryCode' => $countryCode,
                     'displayLabel' => $label,
                 ]
             );
@@ -307,6 +325,7 @@ final class CreateConnectedUserAddressService
                 'displayLabel' => (string) $address['display_label'],
                 'contactPhone' => (string) $address['contact_phone'],
                 'plusCode' => $resolvedPlusCode,
+                'countryCode' => $countryCode,
                 'adminArea' => $adminArea !== null ? [
                     'id' => (int) $adminArea['id'],
                     'name' => (string) $adminArea['name'],
@@ -411,7 +430,7 @@ final class CreateConnectedUserAddressService
         $y = (int) floor($meters['y'] / $cellSizeMeters);
 
         return sprintf(
-            'GN-3M-%s_%s',
+            'GEO-3M-%s_%s',
             $this->encodeSignedInt($x),
             $this->encodeSignedInt($y)
         );
