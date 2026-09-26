@@ -25,6 +25,7 @@ final class DeliveryCreateServiceTest extends TestCase
 {
     public function testCreatePersistsDeliveryAndConsumesPackagePhoto(): void
     {
+        $transactionOpen = false;
         $db = $this->createMock(Connection::class);
         $subscriptions = $this->createMock(SubscriptionManager::class);
         $planLimits = $this->createMock(PlanLimitChecker::class);
@@ -44,7 +45,11 @@ final class DeliveryCreateServiceTest extends TestCase
             ->with($user, $subscription);
         $notificationPublisher->expects(self::once())
             ->method('publishNewDeliveryOrder')
-            ->with(self::callback(static fn (array $delivery): bool => $delivery['status'] === 'QUOTED'))
+            ->with(self::callback(function (array $delivery) use (&$transactionOpen): bool {
+                self::assertTrue($transactionOpen, 'The outbox event must be inserted before commit.');
+
+                return $delivery['status'] === 'QUOTED';
+            }))
             ->willReturn(true);
         $geographyPolicy->expects(self::once())
             ->method('assertDeliveryAllowed')
@@ -71,8 +76,17 @@ final class DeliveryCreateServiceTest extends TestCase
                 );
             });
 
-        $db->expects(self::once())->method('beginTransaction');
-        $db->expects(self::once())->method('commit');
+        $db->expects(self::once())->method('beginTransaction')->willReturnCallback(
+            static function () use (&$transactionOpen): void {
+                $transactionOpen = true;
+            }
+        );
+        $db->expects(self::once())->method('commit')->willReturnCallback(
+            static function () use (&$transactionOpen): void {
+                self::assertTrue($transactionOpen);
+                $transactionOpen = false;
+            }
+        );
         $db->expects(self::never())->method('rollBack');
 
         $db->method('fetchAssociative')
@@ -196,6 +210,7 @@ final class DeliveryCreateServiceTest extends TestCase
         self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_payment'));
         self::assertTrue($this->statementExecuted($executedStatements, 'INSERT INTO delivery_status_history'));
         self::assertTrue($this->statementExecuted($executedStatements, 'UPDATE uploaded_asset'));
+        self::assertFalse($transactionOpen);
     }
 
     public function testCreateRejectsAlreadyConsumedPackagePhoto(): void
@@ -440,13 +455,18 @@ final class DeliveryCreateServiceTest extends TestCase
         ?DeliveryOrderNotificationPublisherInterface $notificationPublisher = null,
         ?DeliveryGeographyPolicyInterface $geographyPolicy = null,
     ): DeliveryCreateService {
+        if ($notificationPublisher === null) {
+            $notificationPublisher = $this->createMock(DeliveryOrderNotificationPublisherInterface::class);
+            $notificationPublisher->method('publishNewDeliveryOrder')->willReturn(true);
+        }
+
         return new DeliveryCreateService(
             $db,
             $pricing,
             $subscriptions,
             $planLimits,
             $usageCounters,
-            $notificationPublisher ?? $this->createMock(DeliveryOrderNotificationPublisherInterface::class),
+            $notificationPublisher,
             $geographyPolicy ?? $this->createMock(DeliveryGeographyPolicyInterface::class),
         );
     }

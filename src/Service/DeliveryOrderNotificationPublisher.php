@@ -33,7 +33,7 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         }
 
         try {
-            $this->db->executeStatement(
+            $inserted = $this->db->executeStatement(
                 <<<'SQL'
                     INSERT INTO outbox_event (
                         id, aggregate_type, aggregate_id, event_name, payload,
@@ -50,6 +50,12 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
                     'payload' => json_encode($delivery, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
                 ],
             );
+
+            if ($inserted !== 1) {
+                $this->logger->error('Delivery notification outbox event was not inserted.', ['deliveryId' => $deliveryId]);
+
+                return false;
+            }
 
             return true;
         } catch (\Throwable $exception) {

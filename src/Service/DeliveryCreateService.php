@@ -105,6 +105,51 @@ final class DeliveryCreateService
         ));
 
         $publicId = Uuid::v7()->toRfc4122();
+        $createdAt = new \DateTimeImmutable();
+        $delivery = [
+            'id' => $publicId,
+            'status' => 'QUOTED',
+            'pickupAddress' => [
+                'id' => (int) $pickup['address_id'],
+                'displayLabel' => $pickup['address_name'] !== null ? (string) $pickup['address_name'] : null,
+                'latitude' => (float) $pickup['latitude'],
+                'longitude' => (float) $pickup['longitude'],
+                'countryCode' => is_string($pickup['country_code'] ?? null) ? strtoupper($pickup['country_code']) : null,
+            ],
+            'dropoffAddress' => [
+                'id' => (int) $dropoff['address_id'],
+                'displayLabel' => $dropoff['address_name'] !== null ? (string) $dropoff['address_name'] : null,
+                'latitude' => (float) $dropoff['latitude'],
+                'longitude' => (float) $dropoff['longitude'],
+                'countryCode' => is_string($dropoff['country_code'] ?? null) ? strtoupper($dropoff['country_code']) : null,
+            ],
+            'serviceType' => $payload['serviceType'],
+            'vehicleType' => $payload['vehicleType'],
+            'recipient' => $recipient,
+            'package' => $package,
+            'pricing' => [
+                'distanceKm' => round($distanceKm, 1),
+                'durationMinutes' => $durationMinutes,
+                'baseAmount' => $pricing->basePrice + $pricing->distancePrice,
+                'surchargeAmount' => array_sum(array_map(
+                    static fn (array $surcharge): int => (int) ($surcharge['amount'] ?? 0),
+                    $pricing->toArray()['surcharges']
+                )),
+                'totalAmount' => $pricing->totalPrice,
+                'currency' => $pricing->currency,
+                'details' => $pricing->toArray(),
+            ],
+            'payment' => [
+                'amount' => $pricing->totalPrice,
+                'currency' => $pricing->currency,
+                'status' => DeliveryPaymentStatus::PENDING->value,
+                'paidAt' => null,
+                'method' => null,
+            ],
+            'scheduledAt' => ($payload['scheduledAt'] ?? null)?->format(\DATE_ATOM),
+            'notes' => $payload['notes'] ?? null,
+            'createdAt' => $createdAt->format(\DATE_ATOM),
+        ];
 
         $this->db->beginTransaction();
 
@@ -328,6 +373,10 @@ final class DeliveryCreateService
                 ]
             );
 
+            if (!$this->notificationPublisher->publishNewDeliveryOrder($delivery)) {
+                throw new \RuntimeException('Impossible de persister l’événement de notification de la livraison.');
+            }
+
             $this->db->commit();
         } catch (\Throwable $e) {
             $this->db->rollBack();
@@ -335,54 +384,6 @@ final class DeliveryCreateService
         }
 
         $this->usageCounters->incrementDeliveriesCreated($user, $subscription);
-
-        $createdAt = new \DateTimeImmutable();
-        $delivery = [
-            'id' => $publicId,
-            'status' => 'QUOTED',
-            'pickupAddress' => [
-                'id' => (int) $pickup['address_id'],
-                'displayLabel' => $pickup['address_name'] !== null ? (string) $pickup['address_name'] : null,
-                'latitude' => (float) $pickup['latitude'],
-                'longitude' => (float) $pickup['longitude'],
-                'countryCode' => is_string($pickup['country_code'] ?? null) ? strtoupper($pickup['country_code']) : null,
-            ],
-            'dropoffAddress' => [
-                'id' => (int) $dropoff['address_id'],
-                'displayLabel' => $dropoff['address_name'] !== null ? (string) $dropoff['address_name'] : null,
-                'latitude' => (float) $dropoff['latitude'],
-                'longitude' => (float) $dropoff['longitude'],
-                'countryCode' => is_string($dropoff['country_code'] ?? null) ? strtoupper($dropoff['country_code']) : null,
-            ],
-            'serviceType' => $payload['serviceType'],
-            'vehicleType' => $payload['vehicleType'],
-            'recipient' => $recipient,
-            'package' => $package,
-            'pricing' => [
-                'distanceKm' => round($distanceKm, 1),
-                'durationMinutes' => $durationMinutes,
-                'baseAmount' => $pricing->basePrice + $pricing->distancePrice,
-                'surchargeAmount' => array_sum(array_map(
-                    static fn (array $surcharge): int => (int) ($surcharge['amount'] ?? 0),
-                    $pricing->toArray()['surcharges']
-                )),
-                'totalAmount' => $pricing->totalPrice,
-                'currency' => $pricing->currency,
-                'details' => $pricing->toArray(),
-            ],
-            'payment' => [
-                'amount' => $pricing->totalPrice,
-                'currency' => $pricing->currency,
-                'status' => DeliveryPaymentStatus::PENDING->value,
-                'paidAt' => null,
-                'method' => null,
-            ],
-            'scheduledAt' => ($payload['scheduledAt'] ?? null)?->format(\DATE_ATOM),
-            'notes' => $payload['notes'] ?? null,
-            'createdAt' => $createdAt->format(\DATE_ATOM),
-        ];
-
-        $this->notificationPublisher->publishNewDeliveryOrder($delivery);
 
         return $delivery;
     }
