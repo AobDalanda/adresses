@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace App\Service\Tracking;
 
+use App\Exception\DeliveryNotAvailableException;
+use App\Exception\DeliveryNotFoundException;
+use App\Repository\DeliveryOrderRepository;
+use App\Service\DeliveryOfferAccessChecker;
 use Doctrine\DBAL\Connection;
 
 final readonly class DeliveryAssignmentService
 {
-    public function __construct(private Connection $db)
-    {
+    public function __construct(
+        private Connection $db,
+        private DeliveryOrderRepository $deliveries,
+        private DeliveryOfferAccessChecker $access,
+    ) {
     }
 
     /**
@@ -25,6 +32,13 @@ final readonly class DeliveryAssignmentService
     public function accept(string $deliveryPublicId, int $driverId): array
     {
         return $this->db->transactional(function () use ($deliveryPublicId, $driverId): array {
+            $lockedDelivery = $this->deliveries->findOffer($deliveryPublicId, true);
+            if ($lockedDelivery === null) {
+                throw new DeliveryNotFoundException('DELIVERY_NOT_FOUND');
+            }
+            // Eligibility is re-evaluated under the same transaction and row lock as assignment.
+            $this->access->assertEligible($driverId, $lockedDelivery);
+
             $delivery = $this->db->fetchAssociative(
                 <<<'SQL'
                     UPDATE delivery_order
@@ -33,14 +47,14 @@ final readonly class DeliveryAssignmentService
                         status = 'ASSIGNED',
                         updated_at = now()
                     WHERE public_id = :publicId
-                      AND status IN ('QUOTED', 'CONFIRMED')
+                      AND status = 'QUOTED'
                       AND assigned_driver_id IS NULL
                     RETURNING id, public_id, status, assigned_at
                     SQL,
                 ['driverId' => $driverId, 'publicId' => $deliveryPublicId],
             );
             if ($delivery === false) {
-                throw new \DomainException('DELIVERY_NOT_AVAILABLE');
+                throw new DeliveryNotAvailableException('DELIVERY_ALREADY_ACCEPTED');
             }
 
             $this->db->executeStatement(

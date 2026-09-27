@@ -2,6 +2,25 @@
 
 Toutes les routes sont versionnees sous `/api/v1` et exigent un JWT.
 
+## Consultation d'une offre
+
+`GET /api/v1/deliveries/{deliveryId}/offer` est réservé au livreur authentifié.
+Les détails ne sont sérialisés qu'après validation du compte actif, de
+l'autorisation canonique issue du dossier et des documents, de la disponibilité
+effective, d'une position GPS valide et récente et de la zone de départ. La
+livraison doit être libre et au statut interne `QUOTED`. Ce statut est exposé
+comme `PENDING` dans le contrat mobile. Les champs absents en base valent `null`.
+
+La réponse `200` contient `id`, `reference`, `status`, `available`,
+`packageType`, `description`, `contactPhone`, `pickupAddress`, `dropoffAddress`,
+`recipient`, `pricing`, `distanceKm` et `durationMinutes`. `reference`,
+`packageType` et `pricing.serviceFee` valent actuellement `null`, car le modèle
+ne stocke pas ces notions. Aucune valeur synthétique n'est générée.
+
+Codes : `401` session absente, `403` livreur non éligible, `404` livraison
+inconnue et `409` livraison déjà attribuée ou plus disponible. Le corps du
+`409` contient `available: false`.
+
 ## Acceptation d'une livraison
 
 ```http
@@ -10,9 +29,9 @@ Authorization: Bearer <jwt>
 ```
 
 Le JWT doit appartenir a un livreur autorise. L'acceptation fait passer la
-livraison de `QUOTED` ou `CONFIRMED` a `ASSIGNED`, et l'API expose ce nouvel
+livraison de `QUOTED` a `ASSIGNED`, et l'API expose ce nouvel
 etat sous le libelle `En cours`. La prise est atomique: si un autre livreur a
-deja accepte la livraison, l'API renvoie `409 DELIVERY_NOT_AVAILABLE`.
+deja accepte la livraison, l'API renvoie `409 DELIVERY_ALREADY_ACCEPTED`.
 
 ```json
 {

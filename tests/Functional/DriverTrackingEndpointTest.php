@@ -70,4 +70,12 @@ final class DriverTrackingEndpointTest extends WebTestCase
 
         self::assertSame(401, $client->getResponse()->getStatusCode());
     }
+
+    public function testDeliveryOfferRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/v1/deliveries/01975aa9-df9c-7b25-b797-6b1ca912e68f/offer');
+
+        self::assertSame(401, $client->getResponse()->getStatusCode());
+    }
 }

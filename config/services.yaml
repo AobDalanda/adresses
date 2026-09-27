@@ -102,6 +102,10 @@ services:
             $presenceTtlSeconds: '%driver_presence_ttl_seconds%'
             $maxLocationAccuracyMeters: '%driver_location_max_accuracy_meters%'
 
+    App\Service\DeliveryOfferAccessChecker:
+        arguments:
+            $maxDistanceMeters: '%driver_notification_radius_meters%'
+
     App\Service\PushClientInterface:
         alias: App\Service\FcmPushClient
 

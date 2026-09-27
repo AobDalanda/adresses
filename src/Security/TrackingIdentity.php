@@ -25,6 +25,9 @@ final readonly class TrackingIdentity
 
     public function isDriver(): bool
     {
-        return $this->canDeliver && $this->providerApproved;
+        $providerRole = in_array('ROLE_PROVIDER', $this->roles, true)
+            || in_array($this->accountType, ['provider', 'livreur'], true);
+
+        return $providerRole && $this->canDeliver && $this->providerApproved;
     }
 }

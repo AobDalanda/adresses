@@ -8,15 +8,15 @@ use App\Exception\DeliveryNotAvailableException;
 use App\Exception\DeliveryNotFoundException;
 use App\Exception\DeliveryOfferForbiddenException;
 use App\Security\TrackingIdentityResolver;
-use App\Service\Tracking\DeliveryAssignmentService;
+use App\Service\DeliveryOfferService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
-final readonly class DeliveryAcceptAction
+final readonly class DeliveryOfferAction
 {
     public function __construct(
         private TrackingIdentityResolver $identities,
-        private DeliveryAssignmentService $assignments,
+        private DeliveryOfferService $offers,
     ) {
     }
 
@@ -31,15 +31,13 @@ final readonly class DeliveryAcceptAction
         }
 
         try {
-            return new JsonResponse($this->assignments->accept($publicId, $identity->userId));
+            return new JsonResponse($this->offers->get($publicId, $identity->userId));
         } catch (DeliveryNotFoundException) {
             return new JsonResponse(['message' => 'DELIVERY_NOT_FOUND'], 404);
         } catch (DeliveryNotAvailableException) {
-            return new JsonResponse(['message' => 'DELIVERY_ALREADY_ACCEPTED'], 409);
+            return new JsonResponse(['message' => 'DELIVERY_ALREADY_ACCEPTED', 'available' => false], 409);
         } catch (DeliveryOfferForbiddenException $exception) {
             return new JsonResponse(['message' => $exception->getMessage()], 403);
-        } catch (\Throwable) {
-            return new JsonResponse(['message' => 'Unable to assign delivery'], 500);
         }
     }
 }

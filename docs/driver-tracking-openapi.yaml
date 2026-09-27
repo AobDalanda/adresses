@@ -8,6 +8,37 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /deliveries/{deliveryId}/offer:
+    get:
+      tags: [Delivery assignment]
+      summary: Consulter une offre disponible pour le livreur authentifié
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offre consultable après contrôle d'éligibilité
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, available, pickupAddress, dropoffAddress, recipient, pricing, distanceKm, durationMinutes]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, const: PENDING }
+                  available: { type: boolean, const: true }
+                  pickupAddress: { type: object }
+                  dropoffAddress: { type: object }
+                  recipient: { type: object }
+                  pricing: { type: object }
+                  distanceKm: { type: [number, 'null'] }
+                  durationMinutes: { type: [integer, 'null'] }
+        '401': { description: JWT absent ou invalide }
+        '403': { description: Livreur non éligible }
+        '404': { description: Livraison inconnue }
+        '409': { description: Livraison déjà attribuée ou plus disponible }
   /drivers/me/availability:
     get:
       tags: [Driver availability]
@@ -82,9 +113,11 @@ paths:
         '401':
           description: JWT absent ou invalide
         '403':
-          description: Le compte authentifie n'est pas un livreur autorise
+          description: Livreur non autorise, indisponible, sans position valide ou hors zone
+        '404':
+          description: Livraison inexistante
         '409':
-          description: Livraison inexistante, indisponible ou deja acceptee
+          description: Livraison deja attribuee ou plus disponible
   /drivers/location:
     post:
       tags: [Driver tracking]
