@@ -42,6 +42,14 @@ app_generate_qrcode:
     controller: App\Controller\GenerateQrCodeController::generate
     methods: [POST]
 
+# Temporary compatibility alias while clients migrate to /api/v1.
+app_delivery_accept_legacy:
+    path: /api/deliveries/{publicId}/accept
+    controller: App\Api\Controller\DeliveryAcceptAction
+    methods: [POST]
+    requirements:
+        publicId: '[0-9a-fA-F-]{36}'
+
 controllers:
     resource:
         path: ../src/Controller/

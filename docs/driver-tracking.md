@@ -9,13 +9,13 @@ Les détails ne sont sérialisés qu'après validation du compte actif, de
 l'autorisation canonique issue du dossier et des documents, de la disponibilité
 effective, d'une position GPS valide et récente et de la zone de départ. La
 livraison doit être libre et au statut interne `QUOTED`. Ce statut est exposé
-comme `PENDING` dans le contrat mobile. Les champs absents en base valent `null`.
+comme `pending` dans le contrat mobile. Les champs absents en base valent `null`.
 
-La réponse `200` contient `id`, `reference`, `status`, `available`,
-`packageType`, `description`, `contactPhone`, `pickupAddress`, `dropoffAddress`,
-`recipient`, `pricing`, `distanceKm` et `durationMinutes`. `reference`,
-`packageType` et `pricing.serviceFee` valent actuellement `null`, car le modèle
-ne stocke pas ces notions. Aucune valeur synthétique n'est générée.
+La réponse `200` enveloppe l'offre dans `data.delivery`, qui contient exactement
+`id`, `deliveryId`, `status`, `available`, `pickupAddress`, `dropoffAddress`,
+`recipient`, `pricing`, `distanceKm` et `durationMinutes`.
+`pricing.serviceFee` correspond à la différence entre le montant total et la
+rémunération estimée du livreur.
 
 Codes : `401` session absente, `403` livreur non éligible, `404` livraison
 inconnue et `409` livraison déjà attribuée ou plus disponible. Le corps du
@@ -27,6 +27,9 @@ inconnue et `409` livraison déjà attribuée ou plus disponible. Le corps du
 POST /api/v1/deliveries/{deliveryId}/accept
 Authorization: Bearer <jwt>
 ```
+
+L'ancien chemin `POST /api/deliveries/{deliveryId}/accept` reste disponible
+temporairement pendant la migration des clients.
 
 Le JWT doit appartenir a un livreur autorise. L'acceptation fait passer la
 livraison de `QUOTED` a `ASSIGNED`, et l'API expose ce nouvel
