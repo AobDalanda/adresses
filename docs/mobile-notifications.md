@@ -21,6 +21,9 @@ Si FCM renouvelle le token, le frontend doit rappeler `PUT /api/v1/notifications
 
 ## Traitement cote frontend
 
+- FCM est l'unique canal autorise a afficher une notification systeme.
+- Les evenements Mercure portent `presentation: "silent"`: ils servent uniquement a rafraichir l'interface et ne doivent jamais creer une notification locale.
+- Les messages FCM portent `presentation: "system"`. En arriere-plan, laisser le systeme afficher la section FCM `notification` sans recreer une notification locale.
 - Ne pas afficher une notification locale si son `notificationId` est deja present dans le stockage local.
 - Utiliser `deliveryId` comme identifiant de remplacement pour les notifications de type `delivery_order.created`.
 - Utiliser `collapseKey` comme cle de regroupement/remplacement quand la librairie mobile le permet.
@@ -37,7 +40,8 @@ Les push de livraison contiennent au minimum:
   "deliveryId": "<uuid>",
   "status": "QUOTED",
   "collapseKey": "delivery_order.<deliveryId>",
-  "notificationGroup": "delivery_order"
+  "notificationGroup": "delivery_order",
+  "presentation": "system"
 }
 ```
 

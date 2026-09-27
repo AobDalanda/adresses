@@ -88,12 +88,12 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
             $payload = $this->payload($notificationId, $delivery, $driver['distanceMeters']);
             $deliveryErrors = [];
             try {
-                $this->deliverMercure($notificationId, $driver['driverId'], $payload);
+                $this->deliverMercure($notificationId, $driver['driverId'], $payload + ['presentation' => 'silent']);
             } catch (\Throwable $exception) {
                 $deliveryErrors[] = $exception;
             }
             try {
-                $this->deliverFcm($notificationId, $driver['driverId'], $payload);
+                $this->deliverFcm($notificationId, $driver['driverId'], $payload + ['presentation' => 'system']);
             } catch (\Throwable $exception) {
                 $deliveryErrors[] = $exception;
             }
@@ -157,10 +157,15 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
     /** @param array<string, mixed> $delivery @return array<string, mixed> */
     private function payload(string $notificationId, array $delivery, int $distanceMeters): array
     {
+        $deliveryId = (string) ($delivery['id'] ?? '');
+
         return [
             'type' => self::TYPE,
             'notificationId' => $notificationId,
-            'deliveryId' => (string) ($delivery['id'] ?? ''),
+            'deliveryId' => $deliveryId,
+            'status' => (string) ($delivery['status'] ?? ''),
+            'collapseKey' => 'delivery_order.' . $deliveryId,
+            'notificationGroup' => 'delivery_order',
             'pickupAddress' => $this->addressLabel($delivery['pickupAddress'] ?? null, 'Départ'),
             'dropoffAddress' => $this->addressLabel($delivery['dropoffAddress'] ?? null, 'Destination'),
             'distanceMeters' => $distanceMeters,
@@ -188,7 +193,13 @@ final readonly class DeliveryOrderNotificationPublisher implements DeliveryOrder
         if (in_array($this->db->fetchOne('SELECT push_status FROM user_notification WHERE id = :id', ['id' => $notificationId]), ['SENT', 'SKIPPED'], true)) {
             return;
         }
-        $tokens = $this->db->fetchFirstColumn('SELECT token FROM user_push_device WHERE user_id = :userId AND enabled = TRUE', ['userId' => $driverId]);
+        $tokens = array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $token): string => trim((string) $token),
+                $this->db->fetchFirstColumn('SELECT token FROM user_push_device WHERE user_id = :userId AND enabled = TRUE', ['userId' => $driverId]),
+            ),
+            static fn (string $token): bool => $token !== '',
+        )));
         if ($tokens === []) {
             $this->setPushResult($notificationId, 'SKIPPED', 0, null);
             return;

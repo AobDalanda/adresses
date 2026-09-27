@@ -110,6 +110,10 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
                 $payload = json_decode($update->getData(), true, flags: JSON_THROW_ON_ERROR);
                 self::assertSame('delivery_order.created', $payload['type']);
                 self::assertSame('018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b', $payload['deliveryId']);
+                self::assertSame('delivery_order.018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b', $payload['collapseKey']);
+                self::assertSame('delivery_order', $payload['notificationGroup']);
+                self::assertSame('QUOTED', $payload['status']);
+                self::assertSame('silent', $payload['presentation']);
                 self::assertSame(720, $payload['distanceMeters']);
 
                 return 'mercure-event-id';
@@ -123,6 +127,8 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
                 self::assertNotEmpty($payload['notificationId']);
                 self::assertSame('Maison', $payload['pickupAddress']);
                 self::assertSame('Bureau', $payload['dropoffAddress']);
+                self::assertSame('delivery_order.018f6f1e-8f1c-7d9a-9e8f-3c4b8e5f6a7b', $payload['collapseKey']);
+                self::assertSame('system', $payload['presentation']);
             }
         );
 
@@ -137,6 +143,7 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
                 'countryCode' => 'FR',
             ],
             'dropoffAddress' => ['displayLabel' => 'Bureau'],
+            'status' => 'QUOTED',
             'serviceType' => 'STANDARD',
             'vehicleType' => 'MOTO',
         ]);
@@ -242,5 +249,45 @@ final class DeliveryOrderNotificationPublisherTest extends TestCase
             'vehicleType' => 'MOTO',
         ]);
         self::assertTrue($disabled);
+    }
+
+    public function testDuplicateAndEmptyPushTokensAreIgnored(): void
+    {
+        $db = $this->createMock(Connection::class);
+        $db->method('fetchAllAssociative')->willReturn([[
+            'driver_id' => 44,
+            'online' => true,
+            'effective_online' => true,
+            'location_age_seconds' => 10,
+            'accuracy_meters' => 5.0,
+            'distance_meters' => 100,
+            'service_compatible' => true,
+            'vehicle_compatible' => true,
+            'country_compatible' => true,
+            'account_validated' => true,
+        ]]);
+        $db->method('executeStatement')->willReturn(1);
+        $db->method('fetchOne')->willReturn('PENDING');
+        $db->method('fetchFirstColumn')->willReturn(['same-token', ' same-token ', '', '   ']);
+
+        $push = $this->createMock(PushClientInterface::class);
+        $push->expects(self::once())
+            ->method('send')
+            ->with('same-token', self::anything(), self::anything(), self::anything());
+
+        $publisher = new DeliveryOrderNotificationPublisher(
+            $this->createMock(HubInterface::class),
+            new NullLogger(),
+            $db,
+            $push,
+            1000,
+            new NearbyDriverMatcher($db, new NullLogger()),
+        );
+        $publisher->handleQueuedDelivery('01a0df23-7593-7b50-9fec-44f16fb30b64', [
+            'id' => '01a0df23-7593-7b50-9fec-44f16fb30b64',
+            'pickupAddress' => ['latitude' => 48.039, 'longitude' => -1.539, 'countryCode' => 'FR'],
+            'serviceType' => 'STANDARD',
+            'vehicleType' => 'MOTO',
+        ]);
     }
 }
