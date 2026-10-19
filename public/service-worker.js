@@ -1,10 +1,10 @@
-const CACHE_NAME = 'aldahim-bo-v11';
+const CACHE_NAME = 'aldahim-bo-v12';
 const APP_SHELL = [
-  '/?pwa=aldahim-bo&v=11',
-  '/manifest.webmanifest?v=11',
-  '/bo/app.js?v=11',
-  '/bo/styles.css?v=11',
-  '/bo/icon.svg?v=11'
+  '/?pwa=aldahim-bo&v=12',
+  '/manifest.webmanifest?v=12',
+  '/bo/app.js?v=12',
+  '/bo/styles.css?v=12',
+  '/bo/icon.svg?v=12'
 ];
 
 self.addEventListener('install', (event) => {
@@ -40,6 +40,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/?pwa=aldahim-bo&v=11')))
+      .catch(() => caches.match(request).then((cached) => cached || caches.match('/?pwa=aldahim-bo&v=12')))
   );
 });

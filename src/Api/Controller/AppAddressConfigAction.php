@@ -2,6 +2,7 @@
 
 namespace App\Api\Controller;
 
+use App\Service\GpsAccuracyPolicyService;
 use App\Service\JwtAuthService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -11,7 +12,8 @@ final class AppAddressConfigAction
     public function __construct(
         private JwtAuthService $jwt,
         private int $targetAccuracyMeters,
-        private int $maxSearchDurationSeconds
+        private int $maxSearchDurationSeconds,
+        private ?GpsAccuracyPolicyService $gpsAccuracyPolicy = null,
     ) {
     }
 
@@ -23,7 +25,7 @@ final class AppAddressConfigAction
         }
 
         return new JsonResponse([
-            'targetAccuracyMeters' => $this->targetAccuracyMeters,
+            'targetAccuracyMeters' => $this->gpsAccuracyPolicy?->targetAccuracyMeters() ?? $this->targetAccuracyMeters,
             'maxSearchDurationSeconds' => $this->maxSearchDurationSeconds,
         ]);
     }

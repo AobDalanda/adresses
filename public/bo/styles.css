@@ -497,6 +497,36 @@ select {
   font-size: 13px;
 }
 
+.gps-settings {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.measurement-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.measurement-input input {
+  width: 150px;
+}
+
+.measurement-input span {
+  color: var(--muted);
+}
+
+.gps-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .login-screen {
   position: fixed;
   inset: 0;

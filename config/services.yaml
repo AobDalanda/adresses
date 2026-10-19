@@ -97,6 +97,10 @@ services:
             $presenceTtlSeconds: '%driver_presence_ttl_seconds%'
             $maxLocationAccuracyMeters: '%driver_location_max_accuracy_meters%'
 
+    App\Service\GpsAccuracyPolicyService:
+        arguments:
+            $defaultAccuracyMeters: '%app_address_target_accuracy_meters%'
+
     App\Service\Tracking\DriverAvailabilityService:
         arguments:
             $presenceTtlSeconds: '%driver_presence_ttl_seconds%'

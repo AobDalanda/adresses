@@ -4,6 +4,7 @@ const state = {
   providers: [],
   plans: [],
   users: [],
+  gpsAccuracy: null,
   userType: 'MOBILE',
   deferredInstall: null,
   otpRequested: false,
@@ -15,6 +16,10 @@ const views = {
   overview: {
     title: "Vue d'ensemble",
     subtitle: 'Suivi opérationnel des comptes, prestataires et accès mobile.'
+  },
+  'gps-accuracy': {
+    title: 'Précision GPS',
+    subtitle: 'Configuration de la précision cible pour la localisation des adresses.'
   },
   providers: {
     title: 'Prestataires',
@@ -47,7 +52,7 @@ function loadStoredToken() {
 
 function wasReloadedForVersion() {
   try {
-    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '11';
+    return sessionStorage.getItem('aldahim.bo.versionReloaded') === '12';
   } catch (error) {
     return false;
   }
@@ -267,6 +272,59 @@ function renderPlans() {
       <p><strong>${escapeHtml(formatPrice(plan))}</strong></p>
     </article>
   `).join('');
+}
+
+function setGpsMessage(message, isError = false) {
+  const element = $('[data-gps-message]');
+  element.textContent = message;
+  element.classList.toggle('error', isError);
+}
+
+async function loadGpsAccuracy() {
+  if (!state.token) {
+    return;
+  }
+
+  setGpsMessage('Chargement...');
+  try {
+    const policy = await authorizedJson('/api/v1/admin/settings/gps-accuracy');
+    state.gpsAccuracy = policy;
+    $('[data-gps-max-accuracy]').value = policy.targetAccuracyMeters;
+    setGpsMessage(policy.updatedAt
+      ? `Dernière modification : ${new Date(policy.updatedAt).toLocaleString('fr-FR')}`
+      : 'Valeur par défaut');
+  } catch (error) {
+    setGpsMessage(error.message === 'FORBIDDEN'
+      ? 'Cette configuration est réservée aux administrateurs.'
+      : error.message, true);
+  }
+}
+
+async function saveGpsAccuracy(event) {
+  event.preventDefault();
+  const input = $('[data-gps-max-accuracy]');
+  const value = Number(input.value);
+  if (!Number.isInteger(value) || value < 1 || value > 500) {
+    setGpsMessage('Saisissez une valeur entière comprise entre 1 et 500 mètres.', true);
+    return;
+  }
+
+  $('[data-gps-save]').disabled = true;
+  setGpsMessage('Enregistrement...');
+  try {
+    state.gpsAccuracy = await authorizedJson('/api/v1/admin/settings/gps-accuracy', {
+      method: 'PATCH',
+      body: { targetAccuracyMeters: value }
+    });
+    input.value = state.gpsAccuracy.targetAccuracyMeters;
+    setGpsMessage('Précision GPS enregistrée.');
+  } catch (error) {
+    setGpsMessage(error.message === 'FORBIDDEN'
+      ? 'Cette configuration est réservée aux administrateurs.'
+      : error.message, true);
+  } finally {
+    $('[data-gps-save]').disabled = false;
+  }
 }
 
 function renderUsers() {
@@ -542,11 +600,11 @@ function registerServiceWorker() {
 
     state.reloadedForVersion = true;
     try {
-      sessionStorage.setItem('aldahim.bo.versionReloaded', '11');
+      sessionStorage.setItem('aldahim.bo.versionReloaded', '12');
     } catch (error) {
       // Continue with the one-time reload even when session storage is unavailable.
     }
-    window.location.replace('/?pwa=aldahim-bo&v=11');
+    window.location.replace('/?pwa=aldahim-bo&v=12');
   });
 
   navigator.serviceWorker.register('/service-worker.js').then((registration) => {
@@ -561,6 +619,9 @@ function bindEvents() {
     setView(button.dataset.view);
     if (button.dataset.view === 'users') {
       loadUsers();
+    }
+    if (button.dataset.view === 'gps-accuracy') {
+      loadGpsAccuracy();
     }
   }));
   $('[data-refresh]').addEventListener('click', refresh);
@@ -586,6 +647,7 @@ function bindEvents() {
   $('[data-user-rows]').addEventListener('click', handleUserTableAction);
   $('[data-user-close]').addEventListener('click', closeUserForm);
   $('[data-user-cancel]').addEventListener('click', closeUserForm);
+  $('[data-gps-accuracy-form]').addEventListener('submit', saveGpsAccuracy);
   window.addEventListener('online', updateOnlineState);
   window.addEventListener('offline', updateOnlineState);
 }
@@ -698,4 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setView(initialView());
   updateAuthUi();
   refresh();
+  if (initialView() === 'gps-accuracy') {
+    loadGpsAccuracy();
+  }
 });
