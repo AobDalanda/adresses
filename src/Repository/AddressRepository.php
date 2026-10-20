@@ -22,6 +22,7 @@ class AddressRepository
                    a.created_at
             FROM address a
             WHERE a.id = :id
+              AND a.deleted_at IS NULL
             LIMIT 1
         ";
 
@@ -50,7 +51,8 @@ class AddressRepository
             FROM address a
             JOIN geo_cell gc ON a.geo_cell_id = gc.id,
                  ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography AS point
-            WHERE ST_DWithin(gc.centroid, point, :radius)
+            WHERE a.deleted_at IS NULL
+              AND ST_DWithin(gc.centroid, point, :radius)
             ORDER BY distance ASC
             LIMIT 1
         ";

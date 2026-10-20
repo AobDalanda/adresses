@@ -419,6 +419,7 @@ final class DeliveryCreateService
                 LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
                 LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
                 WHERE a.id = :addressId
+                  AND a.deleted_at IS NULL
                 LIMIT 1
                 SQL,
             ['addressId' => $addressId]
@@ -452,6 +453,7 @@ final class DeliveryCreateService
                 LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
                 LEFT JOIN geo_admin_area gaa ON gaa.id = a.admin_area_id
                 WHERE ua.id = :userAddressId
+                  AND a.deleted_at IS NULL
                 LIMIT 1
                 SQL,
             ['userAddressId' => $userAddressId]

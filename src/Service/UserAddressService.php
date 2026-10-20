@@ -44,6 +44,7 @@ class UserAddressService
             LEFT JOIN gps_weighted_location gwl ON gwl.id = a.weighted_location_id
             LEFT JOIN geo_plus_code gpc ON gpc.id = a.plus_code_id
             WHERE ua.user_id = :userId
+              AND a.deleted_at IS NULL
             ORDER BY ua.is_primary DESC, ua.id DESC
             LIMIT 1
             ',
@@ -159,9 +160,11 @@ class UserAddressService
         $row = $this->db->fetchAssociative(
             '
             SELECT is_primary
-            FROM user_address
-            WHERE user_id = :userId
-              AND address_id = :addressId
+            FROM user_address ua
+            JOIN address a ON a.id = ua.address_id
+            WHERE ua.user_id = :userId
+              AND ua.address_id = :addressId
+              AND a.deleted_at IS NULL
             LIMIT 1
             ',
             [
@@ -202,6 +205,14 @@ class UserAddressService
                 return false;
             }
 
+            // Serialize deletion with delivery creation. PostgreSQL foreign-key
+            // checks also lock the referenced address row, preventing a delivery
+            // from being attached between the usage check and the physical delete.
+            $this->db->fetchOne(
+                'SELECT id FROM address WHERE id = :addressId FOR UPDATE',
+                ['addressId' => $addressId]
+            );
+
             $this->db->executeStatement(
                 '
                 DELETE FROM user_address
@@ -224,10 +235,29 @@ class UserAddressService
             );
 
             if ($remainingOwnerCount === 0) {
-                $this->db->executeStatement(
-                    'DELETE FROM address WHERE id = :addressId',
+                $isUsedByDelivery = (bool) $this->db->fetchOne(
+                    '
+                    SELECT EXISTS(
+                        SELECT 1
+                        FROM delivery_order
+                        WHERE pickup_address_id = :addressId
+                           OR dropoff_address_id = :addressId
+                    )
+                    ',
                     ['addressId' => $addressId]
                 );
+
+                if ($isUsedByDelivery) {
+                    $this->db->executeStatement(
+                        'UPDATE address SET deleted_at = CURRENT_TIMESTAMP WHERE id = :addressId',
+                        ['addressId' => $addressId]
+                    );
+                } else {
+                    $this->db->executeStatement(
+                        'DELETE FROM address WHERE id = :addressId',
+                        ['addressId' => $addressId]
+                    );
+                }
             }
 
             $this->db->commit();

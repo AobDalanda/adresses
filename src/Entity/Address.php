@@ -35,4 +35,7 @@ class Address
 
     #[ORM\Column(type: 'datetime')]
     public \DateTimeInterface $createdAt;
+
+    #[ORM\Column(name: 'deleted_at', type: 'datetimetz_immutable', nullable: true)]
+    public ?\DateTimeImmutable $deletedAt = null;
 }
